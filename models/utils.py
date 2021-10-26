@@ -8,11 +8,12 @@ from threading import Thread
 from pathlib import Path
 
 import paddle
+
 matplotlib.use('Agg')
 
 
 class AverageTimer:
-    """ Class to help manage printing simple timing of code execution. """
+    """ 用于管理简单的代码执行时间的类 """
 
     def __init__(self, smoothing=0.3, newline=False):
         self.smoothing = smoothing
@@ -54,11 +55,11 @@ class AverageTimer:
 
 
 class VideoStreamer:
-    """ Class to help process image streams. Four types of possible inputs:"
-        1.) USB Webcam.
-        2.) An IP camera
-        3.) A directory of images (files in directory matching 'image_glob').
-        4.) A video file, such as an .mp4 or .avi file.
+    """ 用于处理图像流的类，四种可能的输入类型 "
+        1.) USB网络摄像头.
+        2.) IP摄像机
+        3.) 图像目录 (与 'image_glob' 匹配的目录中的文件).
+        4.) 视频文件, 如.mp4或.avi文件.
     """
 
     def __init__(self, basedir, resize, skip, image_glob, max_length=1000000):
@@ -115,11 +116,11 @@ class VideoStreamer:
             raise IOError('Could not read camera')
 
     def load_image(self, impath):
-        """ Read image as grayscale and resize to img_size.
-        Inputs
-            impath: Path to input image.
+        """ 将图像读取为灰度，并将其大小调整为img_size大小.
+        输入
+            impath: 输入图像的路径.
         Returns
-            grayim: uint8 numpy array sized H x W.
+            grayim: uint8 numpy阵列大小为高 x 宽.
         """
         grayim = cv2.imread(impath, 0)
         if grayim is None:
@@ -131,10 +132,10 @@ class VideoStreamer:
         return grayim
 
     def next_frame(self):
-        """ Return the next frame, and increment internal counter.
+        """ 返回下一帧，并递增内部counter.
         Returns
-             image: Next H x W image.
-             status: True or False depending whether image was loaded.
+             image: 下一幅 H x W 图像.
+             status: True or False ，取决于图像是否已加载
         """
         if self.i == self.max_length:
             return None, False
@@ -165,6 +166,7 @@ class VideoStreamer:
         self.i = self.i + 1
         return image, True
 
+    # 启动IP摄像头线程
     def start_ip_camera_thread(self):
         self._ip_thread = Thread(target=self.update_ip_camera, args=())
         self._ip_running = True
@@ -172,6 +174,7 @@ class VideoStreamer:
         self._ip_exited = False
         return self
 
+    # 更新IP摄像头
     def update_ip_camera(self):
         while self._ip_running:
             ret, img = self.cap.read()
@@ -184,13 +187,14 @@ class VideoStreamer:
             self._ip_grabbed = ret
             self._ip_index += 1
 
+    # 清空
     def cleanup(self):
         self._ip_running = False
 
 
-# --- PREPROCESSING ---
+# --- 预处理 ---
 
-
+#调整进程大小
 def process_resize(w, h, resize):
     assert len(resize) > 0 and len(resize) <= 2
     if len(resize) == 1 and resize[0] > -1:
@@ -209,11 +213,13 @@ def process_resize(w, h, resize):
     return w_new, h_new
 
 
-def frame2tensor(frame, device):
-    return paddle.to_tensor(frame / 255.0).float()[None, None].to(device)
+#frame转tensor
+def frame2tensor(frame):
+    return paddle.reshape(x=paddle.to_tensor(data=frame / 255.0, dtype=paddle.float32), shape=[1, 1, 240, 320])
 
 
-def read_image(path, device, resize, rotation, resize_float):
+#读取图像
+def read_image(path, resize, rotation, resize_float):
     image = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
     if image is None:
         return None, None, None
@@ -231,13 +237,13 @@ def read_image(path, device, resize, rotation, resize_float):
         if rotation % 2:
             scales = scales[::-1]
 
-    inp = frame2tensor(image, device)
+    inp = frame2tensor(image)
     return image, inp, scales
 
 
-# --- GEOMETRY ---
+# --- 几何形状 ---
 
-
+# pose估计
 def estimate_pose(kpts0, kpts1, K0, K1, thresh, conf=0.99999):
     if len(kpts0) < 5:
         return None
@@ -266,8 +272,9 @@ def estimate_pose(kpts0, kpts1, K0, K1, thresh, conf=0.99999):
     return ret
 
 
+#旋转内在/本质
 def rotate_intrinsics(K, image_shape, rot):
-    """image_shape is the shape of the image after rotation"""
+    """image_shape时旋转后图像的形状"""
     assert rot <= 3
     h, w = image_shape[:2][::-1 if rot % 2 else 1]
     fx, fy, cx, cy = K[0, 0], K[1, 1], K[0, 2], K[1, 2]
@@ -286,6 +293,7 @@ def rotate_intrinsics(K, image_shape, rot):
                          [0.0, 0.0, 1.0]], dtype=K.dtype)
 
 
+#在平面内旋转
 def rotate_pose_inplane(i_T_w, rot):
     rotation_matrices = [np.array([[np.cos(r), -np.sin(r), 0.0, 0.0],
                                    [np.sin(r), np.cos(r), 0.0, 0.0],
@@ -295,15 +303,18 @@ def rotate_pose_inplane(i_T_w, rot):
     return np.dot(rotation_matrices[rot], i_T_w)
 
 
+# 尺度内在
 def scale_intrinsics(K, scales):
     scales = np.diag([1.0 / scales[0], 1.0 / scales[1], 1.0])
     return np.dot(scales, K)
 
 
+# to同种类的均匀的
 def to_homogeneous(points):
     return np.concatenate([points, np.ones_like(points[:, :1])], axis=-1)
 
 
+#计算极线误差
 def compute_epipolar_error(kpts0, kpts1, T_0to1, K0, K1):
     kpts0 = (kpts0 - K0[[0, 1], [2, 2]][None]) / K0[[0, 1], [0, 1]][None]
     kpts1 = (kpts1 - K1[[0, 1], [2, 2]][None]) / K1[[0, 1], [0, 1]][None]
@@ -324,17 +335,20 @@ def compute_epipolar_error(kpts0, kpts1, T_0to1, K0, K1):
     return d
 
 
+#角度误差mat
 def angle_error_mat(R1, R2):
     cos = (np.trace(np.dot(R1.T, R2)) - 1) / 2
     cos = np.clip(cos, -1.0, 1.0)
     return np.rad2deg(np.abs(np.arccos(cos)))
 
 
+#角度误差向量
 def angle_error_vec(v1, v2):
     n = np.linalg.norm(v1) * np.linalg.norm(v2)
     return np.rad2deg(np.arccos(np.clip(np.dot(v1, v2) / n, -1.0, 1.0)))
 
 
+#计算pose误差
 def compute_pose_error(T_0to1, R, t):
     R_gt = T_0to1[:3, :3]
     t_gt = T_0to1[:3, 3]
@@ -344,6 +358,7 @@ def compute_pose_error(T_0to1, R, t):
     return error_t, error_R
 
 
+#计算pose准确率
 def pose_auc(errors, thresholds):
     sort_idx = np.argsort(errors)
     errors = np.array(errors.copy())[sort_idx]
@@ -359,9 +374,10 @@ def pose_auc(errors, thresholds):
     return aucs
 
 
-# --- VISUALIZATION ---
+# --- 可视化 ---
 
 
+#绘制图像对
 def plot_image_pair(imgs, dpi=100, size=6, pad=0.5):
     n = len(imgs)
     assert n == 2, 'number of images must be two'
@@ -376,12 +392,14 @@ def plot_image_pair(imgs, dpi=100, size=6, pad=0.5):
     plt.tight_layout(pad=pad)
 
 
+#绘制keypoint
 def plot_keypoints(kpts0, kpts1, color='w', ps=2):
     ax = plt.gcf().axes
     ax[0].scatter(kpts0[:, 0], kpts0[:, 1], c=color, s=ps)
     ax[1].scatter(kpts1[:, 0], kpts1[:, 1], c=color, s=ps)
 
 
+#绘制matches
 def plot_matches(kpts0, kpts1, color, lw=1.5, ps=4):
     fig = plt.gcf()
     ax = fig.axes
@@ -401,6 +419,7 @@ def plot_matches(kpts0, kpts1, color, lw=1.5, ps=4):
     ax[1].scatter(kpts1[:, 0], kpts1[:, 1], c=color, s=ps)
 
 
+#进行匹配绘图
 def make_matching_plot(image0, image1, kpts0, kpts1, mkpts0, mkpts1,
                        color, text, path, show_keypoints=False,
                        fast_viz=False, opencv_display=False,
@@ -435,6 +454,7 @@ def make_matching_plot(image0, image1, kpts0, kpts1, mkpts0, mkpts1,
     plt.close()
 
 
+#快速匹配绘图
 def make_matching_plot_fast(image0, image1, kpts0, kpts1, mkpts0,
                             mkpts1, color, text, path=None,
                             show_keypoints=False, margin=10,
@@ -504,6 +524,7 @@ def make_matching_plot_fast(image0, image1, kpts0, kpts1, mkpts0,
     return out
 
 
+#颜色映射误差
 def error_colormap(x):
     return np.clip(np.stack([2 - x * 2, x * 2, np.zeros_like(x), np.ones_like(x)],-1),
                    0, 1)

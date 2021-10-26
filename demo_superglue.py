@@ -18,7 +18,8 @@ if __name__ == '__main__':
         description='SuperGlue demo',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument(
-        '--input', type=str, default='0',
+        '--input', type=str, default='assets/freiburg_sequence/',
+        #default='0',
         help='ID of a USB webcam, URL of an IP camera, or path to an image directory or movie file')
     parser.add_argument(
         '--output_dir', type=str, default=None,
@@ -35,7 +36,8 @@ if __name__ == '__main__':
         '--max_length', type=int, default=1000000,
         help='Maximum length if input is a movie or directory')
     parser.add_argument(
-        '--resize', type=int, nargs='+', default=[640, 480],
+        '--resize', type=int, nargs='+', default=[320, 240],
+        #default=[640, 480],
         help='Resize the input image before running inference. If two numbers,'
              ' resize to the exact dimensions, if one number, resize the max'
              ' dimension, if -1, do not resize')
@@ -64,6 +66,7 @@ if __name__ == '__main__':
         help='Show the detected keypoints')
     parser.add_argument(
         '--no_display', action='store_true',
+        default=True,
         help='Do not display images to screen. Useful if running remotely')
     parser.add_argument(
         '--force_cpu', action='store_true',
@@ -85,6 +88,7 @@ if __name__ == '__main__':
 
     device = 'cuda' if paddle.is_compiled_with_cuda() and not opt.force_cpu else 'cpu'
     print('Running inference on device "{}"'.format(device))
+    paddle.set_device("gpu")
     config = {'superpoint':
                   {'nms_radius': opt.nms_radius,
                    'keypoint_threshold': opt.keypoint_threshold,
@@ -95,7 +99,10 @@ if __name__ == '__main__':
                    'match_threshold': opt.match_threshold
                    }
               }
-    matching = Matching(config).eval().to(device)
+
+    matching = Matching(config)
+    matching.eval()
+
     keys = ['keypoints', 'scores', 'descriptors']
 
     vs = VideoStreamer(opt.input, opt.resize, opt.skip,
@@ -103,7 +110,7 @@ if __name__ == '__main__':
     frame, ret = vs.next_frame()
     assert ret, 'Error when reading the first frame (try different --input?)'
 
-    frame_tensor = frame2tensor(frame, device)
+    frame_tensor = frame2tensor(frame)
     last_data = matching.superpoint({'image': frame_tensor})
     last_data = {(k + '0'): last_data[k] for k in keys}
     last_data['image0'] = frame_tensor

@@ -5,6 +5,7 @@ import paddle
 import paddlenlp
 from paddle import nn
 from x2paddle.torch2paddle import constant_init_
+from models.t2p import Parameter
 
 
 def MLP(channels: list, do_bn=True):
@@ -180,18 +181,17 @@ class SuperGlue(nn.Layer):
                                     kernel_size=1,
                                     bias_attr=True)
 
-        bin_score = paddle.create_parameter(shape=paddle.to_tensor(1.0).shape,
-                                            dtype=str(paddle.to_tensor(1.0).numpy().dtype),
-                                            default_initializer=paddle.nn.initializer.Assign(paddle.to_tensor(1.0)))
+        bin_score = paddle.to_tensor(1.)
 
         bin_score.stop_gradient = False
-        self.register_parameter('bin_score', bin_score)
+        #self.register_parameter('bin_score', bin_score)
+        self.register_buffer('bin_score', bin_score)
 
         assert self.config['weights'] in ['indoor', 'outdoor']
         path = Path(__file__).parent
-        path = path / 'weights/superglue_{}.pdiparams'.format(self.config['weights'])
-        self.load_state_dict(paddle.load(str(path)))
-        print('Loaded SuperGlue model ("{}" weights)'.format(self.config['weights']))
+        path = path / 'weights/superglue_{}.pdparams'.format(self.config['weights'])
+        self.set_state_dict(paddle.load(str(path)))
+        print('Loaded SuperGlue model (\"{}\" weights)'.format(self.config['weights']))
 
     def forward(self, data):
         """Run SuperGlue on a pair of keypoints and descriptors"""

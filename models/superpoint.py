@@ -8,19 +8,21 @@ def simple_nms(scores, nms_radius: int):
     assert nms_radius >= 0
 
     def max_pool(x):
-        return paddle.nn.functional.max_pool2d(x, kernel_size=nms_radius*2+1,
-                                               stride=1, padding=nms_radius)
+        x = paddle.reshape(x, shape=[1, 1, 240, 320])
+        x = paddle.nn.functional.max_pool2d(x, kernel_size=nms_radius*2+1,
+                                            stride=1, padding=nms_radius)
+        return paddle.squeeze(x, axis=[0])
 
-    zeros = paddle.full_like(scores).requires_grad_(False)
-    max_mask = scores == max_pool(scores)
+    zeros = paddle.full_like(scores, fill_value=0.0, dtype=paddle.float32).requires_grad_(False)
+
+    max_mask = paddle.equal(scores, max_pool(scores))
     for _ in range(2):
         supp_mask = max_pool(max_mask.float()) > 0
         supp_scores = paddle.where(supp_mask, zeros, scores)
 
-        new_max_mask = supp_scores == max_pool(supp_scores)
-        #max_mask = max_mask | new_max_mask & ~supp_mask
+        new_max_mask = paddle.equal(supp_scores, max_pool(supp_scores))
         max_mask = paddle.logical_and(paddle.logical_or(max_mask, new_max_mask),
-                                      ~supp_mask)
+                                      paddle.logical_not(supp_mask))
 
     return paddle.where(max_mask, scores, zeros)
 
@@ -79,7 +81,6 @@ class SuperPoint(nn.Layer):
         super().__init__()
         self.config = {**self.default_config, **config}
 
-        #self.relu = paddle.nn.ReLU(inplace=True)
         self.relu = paddle.nn.ReLU()
         self.pool = nn.MaxPool2D(kernel_size=2, stride=2)
         c1, c2, c3, c4, c5 = 64, 64, 128, 128, 256
@@ -125,6 +126,8 @@ class SuperPoint(nn.Layer):
 
         cPa = self.relu(self.convPa(x))
         scores = self.convPb(cPa)
+        a = paddle.nn.functional.softmax(scores, 1)
+
         scores = paddle.nn.functional.softmax(scores, 1)[:, :-1]
         b, _, h, w = scores.shape
         scores = scores.permute(0, 2, 3, 1).reshape(b, h, w, 8, 8)
