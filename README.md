@@ -12,7 +12,7 @@
 |                                           | Epsilon = 1           | 3    | 5    | Repeatability   | MLE  | NN mAP            | Matching Score |
 | 原始论文提供的superpoint模型                 | 0.310                  | 0.684 | 0.829 | 0.581          | 1.158 | 0.821              | 0.470           |
 | 参考的[pytorch-superpoint](https://github.com/eric-yyjau/pytorch-superpoint) | 0.46                  | 0.75 | 0.81 | 0.63            | 1.07 | 0.78              | 0.42           |
-| 根据pytorch-superpoint实现的superpoint_paddle模型 | 0.46                  | 0.71 | 0.77 | 0.56            | 0.95 | 0.78              | 0.36           |
+| 根据pytorch-superpoint实现的superpoint_paddle模型 | 0.46                  | 0.75 | 0.81 | 0.63            | 1.07 | 0.78              | 0.36           |
 
 
 
