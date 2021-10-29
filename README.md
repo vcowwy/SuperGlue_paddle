@@ -71,11 +71,6 @@ python train4.py train_base configs/magicpoint_shapes_pair.yaml magicpoint_synth
 - 确保COCO数据集唯一 '$DATA_DIR' (在setting.py中定义)
 <!-- - 您可以通过编辑配置文件中的'task'来导出 hpatches 或 coco 数据集  -->
 
-- 配置文件:
-```
-export_folder: <'train' | 'val'>  # 为训练或验证/评估导出
-```
-
 #### 运行命令:
 
 #### 导出coco - 在训练集上
@@ -83,7 +78,7 @@ export_folder: <'train' | 'val'>  # 为训练或验证/评估导出
 python export.py export_detector_homoAdapt configs/magicpoint_coco_export.yaml magicpoint_synth_homoAdapt_coco
 ```
 #### 导出coco - 在验证集上
-- Edit 'export_folder' to 'val' in 'magicpoint_coco_export.yaml'
+- 在 'magicpoint_coco_export.yaml' 中 设置 'export_folder' 为 'val' 
 ```
 python export.py export_detector_homoAdapt configs/magicpoint_coco_export.yaml magicpoint_synth_homoAdapt_coco
 ```
