@@ -4,6 +4,7 @@
 # current disable residual loss
 """
 import paddle
+import utils.t2p
 
 
 def print_var(points):
@@ -13,12 +14,6 @@ def print_var(points):
 
 
 def pts_to_bbox(points, patch_size):
-    """
-    input: 
-        points: (y, x)
-    output:
-        bbox: (x1, y1, x2, y2)
-    """
     shift_l = (patch_size + 1) / 2
     shift_r = patch_size - shift_l
     pts_l = points - shift_l
@@ -27,13 +22,13 @@ def pts_to_bbox(points, patch_size):
     return bbox
     pass
 
-
+"""
 def _roi_pool(pred_heatmap, rois, patch_size=8):
     from torchvision.ops import roi_pool
-    patches = roi_pool(pred_heatmap, rois.float(), (patch_size, patch_size), spatial_scale=1.0)
+    patches = roi_pool(pred_heatmap, paddle.to_tensor(rois, dtype=paddle.float32), (patch_size, patch_size), spatial_scale=1.0)
     return patches
     pass
-
+"""
 
 def norm_patches(patches):
     patch_size = patches.shape[-1]
@@ -46,11 +41,9 @@ def norm_patches(patches):
 
 
 def extract_patch_from_points(heatmap, points, patch_size=5):
-    """
-    this function works in numpy
-    """
     import numpy as np
     from utils.utils import toNumpy
+
     if isinstance(heatmap, paddle.Tensor):
         heatmap = toNumpy(heatmap)
     heatmap = heatmap.squeeze()
@@ -68,11 +61,7 @@ def extract_patch_from_points(heatmap, points, patch_size=5):
 
 
 def extract_patches(label_idx, image, patch_size=7):
-    """
-    return:
-        patches: tensor [N, 1, patch, patch]
-    """
-    rois = pts_to_bbox(label_idx[:, 2:], patch_size).long()
+    rois = paddle.to_tensor(pts_to_bbox(label_idx[:, 2:], patch_size), dtype=paddle.int64)
 
     rois = paddle.concat((label_idx[:, :1], rois), axis=1)
 
@@ -81,26 +70,14 @@ def extract_patches(label_idx, image, patch_size=7):
 
 
 def points_to_4d(points):
-    """
-    input: 
-        points: tensor [N, 2] check(y, x)
-    """
     num_of_points = points.shape[0]
-    cols = paddle.zeros([num_of_points, 1]).requires_grad_(False).float()
-    points = paddle.concat((cols, cols, points.float()), axis=1)
+    cols = paddle.to_tensor(paddle.zeros([num_of_points, 1]).requires_grad_(False), dtype=float32)
+    points = paddle.concat((cols, cols, paddle.to_tensor(points, dtype=paddle.float32)), axis=1)
     return points
 
 
 def soft_argmax_2d(patches, normalized_coordinates=True):
-    """
-    params:
-        patches: (B, N, H, W)
-    return:
-        coor: (B, N, 2)  (x, y)
-
-    """
-    import torchgeometry as tgm
-    m = tgm.contrib.SpatialSoftArgmax2d(normalized_coordinates=normalized_coordinates)
+    m = utils.t2p.SpatialSoftArgmax2d(normalized_coordinates=normalized_coordinates)
     coords = m(patches)
     return coords
 
@@ -112,16 +89,6 @@ def do_log(patches):
 
 
 def subpixel_loss(labels_2D, labels_res, pred_heatmap, patch_size=7):
-    """
-    input:
-        (tensor should be in GPU)
-        labels_2D: tensor [batch, 1, H, W]
-        labels_res: tensor [batch, 2, H, W]
-        pred_heatmap: tensor [batch, 1, H, W]
-
-    return:
-        loss: sum of all losses
-    """
 
     def _soft_argmax(patches):
         from models.SubpixelNet import SubpixelNet as subpixNet

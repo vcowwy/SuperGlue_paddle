@@ -2,6 +2,7 @@
 import cv2 as cv
 import numpy as np
 import math
+
 random_state = np.random.RandomState(None)
 
 
@@ -11,8 +12,6 @@ def set_random_state(state):
 
 
 def get_random_color(background_color):
-    """ Output a random scalar in grayscale with a least a small
-        contrast with the background color """
     color = random_state.randint(256)
     if abs(color - background_color) < 30:
         color = (color + 128) % 256
@@ -20,13 +19,6 @@ def get_random_color(background_color):
 
 
 def get_different_color(previous_colors, min_dist=50, max_count=20):
-    """ Output a color that contrasts with the previous colors
-    Parameters:
-      previous_colors: np.array of the previous colors
-      min_dist: the difference between the new color and
-                the previous colors must be at least min_dist
-      max_count: maximal number of iterations
-    """
     color = random_state.randint(256)
     count = 0
     while np.any(np.abs(previous_colors - color) < min_dist
@@ -37,7 +29,6 @@ def get_different_color(previous_colors, min_dist=50, max_count=20):
 
 
 def add_salt_and_pepper(img):
-    """ Add salt and pepper noise to an image """
     noise = np.zeros((img.shape[0], img.shape[1]), dtype=np.uint8)
     cv.randu(noise, 0, 255)
     black = noise < 30
@@ -50,15 +41,6 @@ def add_salt_and_pepper(img):
 
 def generate_background(size=(960, 1280), nb_blobs=100, min_rad_ratio=0.01,
     max_rad_ratio=0.05, min_kernel_size=50, max_kernel_size=300):
-    """ Generate a customized background image
-    Parameters:
-      size: size of the image
-      nb_blobs: number of circles to draw
-      min_rad_ratio: the radius of blobs is at least min_rad_size * max(size)
-      max_rad_ratio: the radius of blobs is at most max_rad_size * max(size)
-      min_kernel_size: minimal size of the kernel
-      max_kernel_size: maximal size of the kernel
-    """
     img = np.zeros(size, dtype=np.uint8)
     dim = max(size)
     cv.randu(img, 0, 255)
@@ -77,12 +59,7 @@ def generate_background(size=(960, 1280), nb_blobs=100, min_rad_ratio=0.01,
 
 def generate_custom_background(size, background_color, nb_blobs=3000,
     kernel_boundaries=(50, 100)):
-    """ Generate a customized background to fill the shapes
-    Parameters:
-      background_color: average color of the background image
-      nb_blobs: number of circles to draw
-      kernel_boundaries: interval of the possible sizes of the kernel
-    """
+
     img = np.zeros(size, dtype=np.uint8)
     img = img + get_random_color(background_color)
     blobs = np.concatenate([np.random.randint(0, size[1], size=(nb_blobs, 1
@@ -97,15 +74,11 @@ def generate_custom_background(size, background_color, nb_blobs=3000,
 
 
 def final_blur(img, kernel_size=(5, 5)):
-    """ Apply a final Gaussian blur to the image
-    Parameters:
-      kernel_size: size of the kernel
-    """
+
     cv.GaussianBlur(img, kernel_size, 0, img)
 
 
 def ccw(A, B, C, dim):
-    """ Check if the points are listed in counter-clockwise order """
     if dim == 2:
         return (C[:, 1] - A[:, 1]) * (B[:, 0] - A[:, 0]) > (B[:, 1] - A[:, 1]
             ) * (C[:, 0] - A[:, 0])
@@ -115,24 +88,17 @@ def ccw(A, B, C, dim):
 
 
 def intersect(A, B, C, D, dim):
-    """ Return true if line segments AB and CD intersect """
     return np.any((ccw(A, C, D, dim) != ccw(B, C, D, dim)) & (ccw(A, B, C,
         dim) != ccw(A, B, D, dim)))
 
 
 def keep_points_inside(points, size):
-    """ Keep only the points whose coordinates are inside the dimensions of
-    the image of size 'size' """
     mask = (points[:, 0] >= 0) & (points[:, 0] < size[1]) & (points[:, 1] >= 0
         ) & (points[:, 1] < size[0])
     return points[mask, :]
 
 
 def draw_lines(img, nb_lines=10):
-    """ Draw random lines and output the positions of the endpoints
-    Parameters:
-      nb_lines: maximal number of lines
-    """
     num_lines = random_state.randint(1, nb_lines)
     segments = np.empty((0, 4), dtype=np.int)
     points = np.empty((0, 2), dtype=np.int)
@@ -158,11 +124,6 @@ def draw_lines(img, nb_lines=10):
 
 
 def draw_polygon(img, max_sides=8):
-    """ Draw a polygon with a random number of corners
-    and return the corner points
-    Parameters:
-      max_sides: maximal number of sides + 1
-    """
     num_corners = random_state.randint(3, max_sides)
     min_dim = min(img.shape[0], img.shape[1])
     rad = max(random_state.rand() * min_dim / 2, min_dim / 10)
@@ -194,8 +155,6 @@ def draw_polygon(img, max_sides=8):
 
 
 def overlap(center, rad, centers, rads):
-    """ Check that the circle with (center, rad)
-    doesn't overlap with the other circles """
     flag = False
     for i in range(len(rads)):
         if np.linalg.norm(center - centers[i]) + min(rad, rads[i]) < max(rad,
@@ -206,19 +165,12 @@ def overlap(center, rad, centers, rads):
 
 
 def angle_between_vectors(v1, v2):
-    """ Compute the angle (in rad) between the two vectors v1 and v2. """
     v1_u = v1 / np.linalg.norm(v1)
     v2_u = v2 / np.linalg.norm(v2)
     return np.arccos(np.clip(np.dot(v1_u, v2_u), -1.0, 1.0))
 
 
 def draw_multiple_polygons(img, max_sides=8, nb_polygons=30, **extra):
-    """ Draw multiple polygons with a random number of corners
-    and return the corner points
-    Parameters:
-      max_sides: maximal number of sides + 1
-      nb_polygons: maximal number of polygons
-    """
     segments = np.empty((0, 4), dtype=np.int)
     centers = []
     rads = []
@@ -277,10 +229,6 @@ def draw_multiple_polygons(img, max_sides=8, nb_polygons=30, **extra):
 
 
 def draw_ellipses(img, nb_ellipses=20):
-    """ Draw several ellipses
-    Parameters:
-      nb_ellipses: maximal number of ellipses
-    """
     centers = np.empty((0, 2), dtype=np.int)
     rads = np.empty((0, 1), dtype=np.int)
     min_dim = min(img.shape[0], img.shape[1]) / 4
@@ -304,10 +252,6 @@ def draw_ellipses(img, nb_ellipses=20):
 
 
 def draw_star(img, nb_branches=6):
-    """ Draw a star and output the interest points
-    Parameters:
-      nb_branches: number of branches of the star
-    """
     num_branches = random_state.randint(3, nb_branches)
     min_dim = min(img.shape[0], img.shape[1])
     thickness = random_state.randint(min_dim * 0.01, min_dim * 0.02)
@@ -331,11 +275,6 @@ def draw_star(img, nb_branches=6):
 
 def draw_checkerboard(img, max_rows=7, max_cols=7, transform_params=(0.05, 
     0.15)):
-    """ Draw a checkerboard and output the interest points
-    Parameters:
-      max_rows: maximal number of rows + 1
-      max_cols: maximal number of cols + 1
-      transform_params: set the range of the parameters of the transformations"""
     background_color = int(np.mean(img))
     rows = random_state.randint(3, max_rows)
     cols = random_state.randint(3, max_cols)
@@ -421,13 +360,7 @@ def draw_checkerboard(img, max_rows=7, max_cols=7, transform_params=(0.05,
 
 def draw_stripes(img, max_nb_cols=13, min_width_ratio=0.04,
     transform_params=(0.05, 0.15)):
-    """ Draw stripes in a distorted rectangle and output the interest points
-    Parameters:
-      max_nb_cols: maximal number of stripes to be drawn
-      min_width_ratio: the minimal width of a stripe is
-                       min_width_ratio * smallest dimension of the image
-      transform_params: set the range of the parameters of the transformations
-    """
+
     background_color = int(np.mean(img))
     board_size = int(img.shape[0] * (1 + random_state.rand())), int(img.
         shape[1] * (1 + random_state.rand()))
@@ -504,16 +437,7 @@ def draw_stripes(img, max_nb_cols=13, min_width_ratio=0.04,
 
 def draw_cube(img, min_size_ratio=0.2, min_angle_rot=math.pi / 10,
     scale_interval=(0.4, 0.6), trans_interval=(0.5, 0.2)):
-    """ Draw a 2D projection of a cube and output the corners that are visible
-    Parameters:
-      min_size_ratio: min(img.shape) * min_size_ratio is the smallest achievable
-                      cube side size
-      min_angle_rot: minimal angle of rotation
-      scale_interval: the scale is between scale_interval[0] and
-                      scale_interval[0]+scale_interval[1]
-      trans_interval: the translation is between img.shape*trans_interval[0] and
-                      img.shape*(trans_interval[0] + trans_interval[1])
-    """
+
     background_color = int(np.mean(img))
     min_dim = min(img.shape[:2])
     min_side = min_dim * min_size_ratio
@@ -562,13 +486,13 @@ def draw_cube(img, min_size_ratio=0.2, min_angle_rot=math.pi / 10,
 
 
 def gaussian_noise(img):
-    """ Apply random noise to the image """
+
     cv.randu(img, 0, 255)
     return np.empty((0, 2), dtype=np.int)
 
 
 def draw_interest_points(img, points):
-    """ Convert img in RGB and draw in green the interest points """
+
     img_rgb = np.stack([img, img, img], axis=2)
     for i in range(points.shape[0]):
         cv.circle(img_rgb, (points[i][0], points[i][1]), 5, (0, 255, 0), -1)

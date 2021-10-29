@@ -317,7 +317,7 @@ class PixelwiseContrastiveLoss(object):
 
         norm_degree = 2
 
-        squared_l2_pixel_loss = 1.0/M_pixel * paddle.clip((ground_truth_u_v_b - sampled_u_v_b).float().norm(norm_degree,1), max=M_pixel)
+        squared_l2_pixel_loss = 1.0/M_pixel * paddle.clip(paddle.to_tensor((ground_truth_u_v_b - sampled_u_v_b), dtype=paddle.float32).norm(norm_degree,1), max=M_pixel)
 
         return squared_l2_pixel_loss, ground_truth_u_v_b, sampled_u_v_b
 

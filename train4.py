@@ -10,7 +10,6 @@ import paddle
 import paddle.optimizer
 import paddle.io
 
-#from tensorboardX import SummaryWriter
 from visualdl import LogWriter
 
 from utils.utils import getWriterPath
@@ -39,10 +38,10 @@ def train_joint(config, output_dir, args):
     paddle.set_default_dtype('float32')
     task = config['data']['dataset']
 
-    device = 'cuda' if paddle.is_compiled_with_cuda() else 'cpu'
-    device = device.replace('cuda', 'gpu')
-    device = paddle.set_device(device)
+    device = paddle.set_device('gpu')
+
     logging.info('train on device: %s', device)
+
     with open(os.path.join(output_dir, 'config.yml'), 'w') as f:
         yaml.dump(config, f, default_flow_style=False)
 
@@ -80,6 +79,8 @@ def train_joint(config, output_dir, args):
 
 if __name__ == '__main__':
     paddle.set_default_dtype('float32')
+    device = paddle.device.set_device('gpu')
+
     logging.basicConfig(format='[%(asctime)s %(levelname)s] %(message)s',
                         datefmt='%m/%d/%Y %H:%M:%S', level=logging.INFO)
 
@@ -109,7 +110,7 @@ if __name__ == '__main__':
                             datefmt='%m/%d/%Y %H:%M:%S', level=logging.DEBUG)
 
     with open(args.config, 'r') as f:
-        config = yaml.load(f)
+        config = yaml.load(f, Loader=yaml.FullLoader)
 
     output_dir = os.path.join(EXPER_PATH, args.exper_name)
     os.makedirs(output_dir, exist_ok=True)

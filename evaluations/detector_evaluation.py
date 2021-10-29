@@ -6,16 +6,10 @@ from settings import EXPER_PATH
 
 
 def get_paths(exper_name):
-    """
-    Return a list of paths to the outputs of the experiment.
-    """
     return glob(osp.join(EXPER_PATH, 'outputs/{}/*.npz'.format(exper_name)))
 
 
 def compute_tp_fp(data, remove_zero=0.0001, distance_thresh=2, simplified=False):
-    """
-    Compute the true and false positive rates.
-    """
     gt = np.where(data['keypoint_map'])
     gt = np.stack([gt[0], gt[1]], axis=-1)
     n_gt = len(gt)
@@ -60,9 +54,6 @@ def div0(a, b):
 
 
 def compute_pr(exper_name, **kwargs):
-    """
-    Compute precision and recall.
-    """
     paths = get_paths(exper_name)
     tp, fp, prob, n_gt = [], [], [], 0
     for path in paths:
@@ -91,16 +82,10 @@ def compute_pr(exper_name, **kwargs):
 
 
 def compute_mAP(precision, recall):
-    """
-    Compute average precision.
-    """
     return np.sum(precision[1:] * (recall[1:] - recall[:-1]))
 
 
 def compute_loc_error(exper_name, prob_thresh=0.5, distance_thresh=2):
-    """
-    Compute the localization error.
-    """
 
     def loc_error_per_image(data):
         gt = np.where(data['keypoint_map'])
@@ -127,58 +112,26 @@ def compute_loc_error(exper_name, prob_thresh=0.5, distance_thresh=2):
 
 
 def warp_keypoints(keypoints, H):
-    """
-    :param keypoints:
-    points:
-        numpy (N, (x,y))
-    :param H:
-    :return:
-    """
     num_points = keypoints.shape[0]
     homogeneous_points = np.concatenate([keypoints, np.ones((num_points, 1))], axis=1)
     warped_points = np.dot(homogeneous_points, np.transpose(H))
     return warped_points[:, :2] / warped_points[:, 2:]
 
 
-def compute_repeatability(data, keep_k_points=300, distance_thresh=3,
-    verbose=False):
-    """
-    Compute the repeatability. The experiment must contain in its output the prediction
-    on 2 images, an original image and a warped version of it, plus the homography
-    linking the 2 images.
-    """
+def compute_repeatability(data, keep_k_points=300, distance_thresh=3, verbose=False):
 
     def filter_keypoints(points, shape):
-        """ Keep only the points whose coordinates are
-        inside the dimensions of shape. """
-        """
-        points:
-            numpy (N, (x,y))
-        shape:
-            (y, x)
-        """
         mask = (points[:, 0] >= 0) & (points[:, 0] < shape[1]) &\
                (points[:, 1] >= 0) & (points[:, 1] < shape[0])
         return points[mask, :]
 
     def keep_true_keypoints(points, H, shape):
-        """ Keep only the points whose warped coordinates by H
-        are still inside shape. """
-        """
-        input:
-            points: numpy (N, (x,y))
-            shape: (y, x)
-        return:
-            points: numpy (N, (x,y))
-        """
         warped_points = warp_keypoints(points[:, [0, 1]], H)
         mask = (warped_points[:, 0] >= 0) & (warped_points[:, 0] < shape[1]) &\
                (warped_points[:, 1] >= 0) & (warped_points[:, 1] < shape[0])
         return points[mask, :]
 
     def select_k_best(points, k):
-        """ Select the k most probable points (and strip their proba).
-        points has shape (num_points, 3) where the last coordinate is the proba. """
         sorted_prob = points
         if points.shape[1] > 2:
             sorted_prob = points[points[:, (2)].argsort(), :2]

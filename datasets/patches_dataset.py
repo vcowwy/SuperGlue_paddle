@@ -4,12 +4,14 @@
 import numpy as np
 import cv2
 from pathlib import Path
+from imageio import imread
+
 import paddle
 import paddle.io as data
-from utils.tools import dict_update
-from models.homographies import sample_homography
+
 from settings import DATA_PATH
-from imageio import imread
+from utils.tools import dict_update
+#from models.homographies import sample_homography
 
 
 def load_as_float(path):
@@ -38,15 +40,6 @@ class PatchesDataset(data.Dataset):
         pass
 
     def __getitem__(self, index):
-        """
-
-        :param index:
-        :return:
-            image:
-                tensor (1,H,W)
-            warped_image:
-                tensor (1,H,W)
-        """
 
         def _read_image(path):
             input_image = cv2.imread(path)
@@ -65,22 +58,24 @@ class PatchesDataset(data.Dataset):
                 image = self.transform(image)
             return image
 
-        def _warp_image(image):
+        """def _warp_image(image):
             H = sample_homography(tf.shape(image)[:2])
             warped_im = tf.contrib.image.transform(image, H, interpolation=\
                 'BILINEAR')
             return {'warped_im': warped_im, 'H': H}
+"""
 
         def _adapt_homography_to_preprocessing(image, H):
             s = max(self.sizer / image.shape[:2])
             mat = np.array([[1, 1, s], [1, 1, s], [1 / s, 1 / s, 1]])
             H = H * mat
             return H
+
         sample = self.samples[index]
         image_original = _read_image(sample['image'])
         image = _preprocess(image_original)
         warped_image = _preprocess(_read_image(sample['warped_image']))
-        to_numpy = False
+        to_numpy = True
         if to_numpy:
             image, warped_image = np.array(image), np.array(warped_image)
         homography = _adapt_homography_to_preprocessing(image_original,

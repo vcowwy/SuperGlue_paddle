@@ -1,27 +1,26 @@
 """
 Adapted from https://github.com/rpautrat/SuperPoint/blob/master/superpoint/datasets/synthetic_dataset.py
-
-Author: You-Yi Jau, Rui Zhu
-Date: 2019/12/12
 """
-import paddle.io as data
-import paddle
 import numpy as np
-from imageio import imread
-import tensorflow as tf
-from pathlib import Path
 import tarfile
 import random
 import logging
-from utils.tools import dict_update
-from datasets import synthetic_dataset
-from tqdm import tqdm
+import multiprocessing
 import cv2
 import shutil
+from tqdm import tqdm
+from imageio import imread
+from pathlib import Path
+
+import paddle.io as data
+import paddle
+
+from utils.tools import dict_update
+from datasets import synthetic_dataset
 from settings import DEBUG as debug
 from settings import DATA_PATH
 from settings import SYN_TMPDIR
-import multiprocessing
+
 TMPDIR = SYN_TMPDIR
 
 
@@ -30,8 +29,7 @@ def load_as_float(path):
 
 
 class SyntheticDataset_gaussian(data.Dataset):
-    """
-    """
+
     default_config = {'primitives': 'all', 'truncate': {},
         'validation_size': -1, 'test_size': -1, 'on-the-fly': False,
         'cache_in_memory': False, 'suffix': None,
@@ -53,44 +51,6 @@ class SyntheticDataset_gaussian(data.Dataset):
             'draw_multiple_polygons', 'draw_ellipses', 'draw_star',
             'draw_checkerboard', 'draw_stripes', 'draw_cube', 'gaussian_noise']
     print(drawing_primitives)
-    """
-    def dump_primitive_data(self, primitive, tar_path, config):
-        pass
-    """
-
-    def dump_primitive_data(self, primitive, tar_path, config):
-        temp_dir = Path(TMPDIR, primitive)
-        tf.logging.info('Generating tarfile for primitive {}.'.format(
-            primitive))
-        synthetic_dataset.set_random_state(np.random.RandomState(config[
-            'generation']['random_seed']))
-        for split, size in self.config['generation']['split_sizes'].items():
-            im_dir, pts_dir = [Path(temp_dir, i, split) for i in ['images',
-                'points']]
-            im_dir.mkdir(parents=True, exist_ok=True)
-            pts_dir.mkdir(parents=True, exist_ok=True)
-            for i in tqdm(range(size), desc=split, leave=False):
-                image = synthetic_dataset.generate_background(config[
-                    'generation']['image_size'], **config['generation'][
-                    'params']['generate_background'])
-                points = np.array(getattr(synthetic_dataset, primitive)(
-                    image, **config['generation']['params'].get(primitive, {}))
-                    )
-                points = np.flip(points, 1)
-                b = config['preprocessing']['blur_size']
-                image = cv2.GaussianBlur(image, (b, b), 0)
-                points = points * np.array(config['preprocessing']['resize'
-                    ], np.float) / np.array(config['generation'][
-                    'image_size'], np.float)
-                image = cv2.resize(image, tuple(config['preprocessing'][
-                    'resize'][::-1]), interpolation=cv2.INTER_LINEAR)
-                cv2.imwrite(str(Path(im_dir, '{}.png'.format(i))), image)
-                np.save(Path(pts_dir, '{}.npy'.format(i)), points)
-        tar = tarfile.open(tar_path, mode='w:gz')
-        tar.add(temp_dir, arcname=primitive)
-        tar.close()
-        shutil.rmtree(temp_dir)
-        tf.logging.info('Tarfile dumped to {}.'.format(tar_path))
 
     def parse_primitives(self, names, all_primitives):
         p = all_primitives if names == 'all' else names if isinstance(names,
@@ -193,12 +153,6 @@ class SyntheticDataset_gaussian(data.Dataset):
         return accumulate_confid_map
 
     def __getitem__(self, index):
-        """
-        :param index:
-        :return:
-            labels_2D: tensor(1, H, W)
-            image: tensor(1, H, W)
-        """
 
         def checkSat(img, name=''):
             if img.max() > 1:
@@ -207,12 +161,6 @@ class SyntheticDataset_gaussian(data.Dataset):
                 print(name, img.min())
 
         def imgPhotometric(img):
-            """
-
-            :param img:
-                numpy (H, W)
-            :return:
-            """
             augmentation = self.ImgAugTransform(**self.config['augmentation'])
             img = img[:, :, np.newaxis]
             img = augmentation(img)
@@ -222,13 +170,12 @@ class SyntheticDataset_gaussian(data.Dataset):
 
         def get_labels(pnts, H, W):
             labels = paddle.zeros([H, W]).requires_grad_(False)
-            pnts_int = paddle.min(pnts.round().long(), paddle.
-                to_tensor([[W - 1, H - 1]]).long())
+            pnts_int = paddle.min(paddle.to_tensor(pnts.round(), dtype=paddle.int64), paddle.to_tensor([[W - 1, H - 1]], dtype=paddle.int64))
             labels[pnts_int[:, 1], pnts_int[:, 0]] = 1
             return labels
 
         def get_label_res(H, W, pnts):
-            quan = lambda x: x.round().long()
+            quan = lambda x: paddle.to_tensor(x.round(), dtype=paddle.int64)
             labels_res = paddle.zeros([H, W, 2]).requires_grad_(False)
             labels_res[quan(pnts)[:, (1)], quan(pnts)[:, (0)], :
                 ] = pnts - pnts.round()
@@ -243,7 +190,7 @@ class SyntheticDataset_gaussian(data.Dataset):
         self.H = H
         self.W = W
         pnts = np.load(sample['points'])
-        pnts = paddle.to_tensor(pnts).float()
+        pnts = paddle.to_tensor(pnts, dtype=paddle.float32)
         pnts = paddle.stack((pnts[:, (1)], pnts[:, (0)]), axis=1)
         pnts = filter_points(pnts, paddle.to_tensor([W, H]))
         sample = {}
@@ -274,7 +221,7 @@ class SyntheticDataset_gaussian(data.Dataset):
             homography = self.sample_homography(np.array([2, 2]), shift=-1,
                 **self.config['augmentation']['homographic']['params'])
             homography = inv(homography)
-            homography = paddle.to_tensor(homography).float()
+            homography = paddle.to_tensor(homography, dtype=paddle.float32)
             inv_homography = homography.inverse()
             img = paddle.to_tensor(img)
             warped_img = self.inv_warp_image(img.squeeze(), inv_homography,
@@ -347,11 +294,6 @@ class SyntheticDataset_gaussian(data.Dataset):
         return len(self.samples)
 
     def gaussian_blur(self, image):
-        """
-        image: np [H, W]
-        return:
-            blurred_image: np [H, W]
-        """
         aug_par = {'photometric': {}}
         aug_par['photometric']['enable'] = True
         aug_par['photometric']['params'] = self.config['gaussian_label'][

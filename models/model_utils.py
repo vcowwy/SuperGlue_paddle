@@ -4,6 +4,8 @@
 import paddle
 import numpy as np
 
+from utils.t2p import SpatialSoftArgmax2d
+
 
 class SuperPointNet_process(object):
 
@@ -18,11 +20,7 @@ class SuperPointNet_process(object):
         pass
 
     def pred_soft_argmax(self, labels_2D, heatmap):
-        """
 
-        return:
-            dict {'loss': mean of difference btw pred and res}
-        """
         patch_size = self.patch_size
         device = self.device
         from utils.losses import norm_patches
@@ -30,7 +28,7 @@ class SuperPointNet_process(object):
         from utils.losses import extract_patches
         from utils.losses import soft_argmax_2d
         label_idx = labels_2D[...].nonzero()
-        patches = extract_patches(label_idx.to(device), heatmap.to(device),
+        patches = extract_patches(label_idx, heatmap,
             patch_size=patch_size)
         from utils.losses import do_log
         patches_log = do_log(patches)
@@ -43,13 +41,7 @@ class SuperPointNet_process(object):
 
     @staticmethod
     def sample_desc_from_points(coarse_desc, pts, cell_size=8):
-        """
-        inputs:
-            coarse_desc: tensor [1, 256, Hc, Wc]
-            pts: tensor [N, 2] (should be the same device as desc)
-        return:
-            desc: tensor [1, N, D]
-        """
+
         samp_pts = pts.transpose(0, 1)
         H, W = coarse_desc.shape[2] * cell_size, coarse_desc.shape[3
             ] * cell_size
@@ -61,20 +53,14 @@ class SuperPointNet_process(object):
             samp_pts[1, :] = samp_pts[1, :] / (float(H) / 2.0) - 1.0
             samp_pts = samp_pts.transpose(0, 1).contiguous()
             samp_pts = samp_pts.view(1, 1, -1, 2)
-            samp_pts = samp_pts.float()
+            samp_pts = paddle.to_tensor(samp_pts, dtype=paddle.float32)
             desc = paddle.nn.functional.grid_sample(coarse_desc, samp_pts, align_corners=True) # tensor [batch_size(1), D, 1, N]
             desc = desc.squeeze().transpose(0, 1).unsqueeze(0)
         return desc
 
     @staticmethod
     def ext_from_points(labels_res, points):
-        """
-        input:
-            labels_res: tensor [batch, channel, H, W]
-            points: tensor [N, 4(pos0(batch), pos1(0), pos2(H), pos3(W) )]
-        return:
-            tensor [N, channel]
-        """
+
         labels_res = labels_res.transpose(1, 2).transpose(2, 3).unsqueeze(1)
         points_res = labels_res[points[:, (0)], points[:, (1)], points[:, (
             2)], points[:, (3)], :]
@@ -82,23 +68,13 @@ class SuperPointNet_process(object):
 
     @staticmethod
     def soft_argmax_2d(patches):
-        """
-        params:
-          patches: (B, N, H, W)
-        return:
-          coor: (B, N, 2)  (x, y)
 
-        """
-        import torchgeometry as tgm
-        m = tgm.contrib.SpatialSoftArgmax2d()
+        m = SpatialSoftArgmax2d()
         coords = m(patches)
         return coords
 
     def heatmap_to_nms(self, heatmap, tensor=False, boxnms=False):
-        """
-        return: 
-          heatmap_nms_batch: np [batch, 1, H, W]
-        """
+
         to_floatTensor = lambda x: paddle.to_tensor(x, dtype=paddle.float32)
         from utils.var_dim import toNumpy
         heatmap_np = toNumpy(heatmap)
@@ -123,10 +99,7 @@ class SuperPointNet_process(object):
 
     @staticmethod
     def heatmap_nms(heatmap, nms_dist=4, conf_thresh=0.015):
-        """
-        input:
-            heatmap: np [(1), H, W]
-        """
+
         heatmap = heatmap.squeeze()
         boxnms = False
         from utils.utils import getPtsFromHeatmap
@@ -143,7 +116,7 @@ class SuperPointNet_process(object):
         pts_idx = heatmap_nms_batch[...].nonzero()
         for i in range(batch_size):
             mask_b = pts_idx[:, 0] == i
-            pts_int_b = pts_idx[mask_b][:, 2:].float()
+            pts_int_b = paddle.to_tensor(pts_idx[mask_b][:, 2:], dtype=paddle.float32)
             pts_int_b = pts_int_b[:, [1, 0]]
             res_b = residual[mask_b]
             pts_b = pts_int_b + res_b

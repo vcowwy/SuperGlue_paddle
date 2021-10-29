@@ -7,17 +7,17 @@ from utils.homographies import scale_homography_torch
 from utils.loss_functions.pixelwise_contrastive_loss import PixelwiseContrastiveLoss
 
 
-def get_coor_cells(Hc, Wc, cell_size, device='cpu', uv=False):
+def get_coor_cells(Hc, Wc, cell_size, device='gpu', uv=False):
     coor_cells = paddle.stack(paddle.meshgrid(paddle.arange(Hc), paddle.arange(Wc)), axis=2)
-    coor_cells = paddle.to_tensor(coor_cells, dtype=paddle.float32).to(device)
+    coor_cells = paddle.to_tensor(coor_cells, dtype=paddle.float32)
     coor_cells = coor_cells.view(-1, 2)
     if uv:
         coor_cells = paddle.stack((coor_cells[:, (1)], coor_cells[:, (0)]), axis=1)
-    return coor_cells.to(device)
+    return coor_cells
 
 
 def warp_coor_cells_with_homographies(coor_cells, homographies, uv=False,
-    device='cpu'):
+    device='gpu'):
     from utils.utils import warp_points
     warped_coor_cells = coor_cells
     if uv == False:
@@ -31,17 +31,6 @@ def warp_coor_cells_with_homographies(coor_cells, homographies, uv=False,
 
 
 def create_non_matches(uv_a, uv_b_non_matches, multiplier):
-    """
-    Simple wrapper for repeated code
-    :param uv_a:
-    :type uv_a:
-    :param uv_b_non_matches:
-    :type uv_b_non_matches:
-    :param multiplier:
-    :type multiplier:
-    :return:
-    :rtype:
-    """
     uv_a_long = (paddle.t(uv_a[0].repeat(multiplier, 1)).contiguous().view(-1, 1),
                  paddle.t(uv_a[1].repeat(multiplier, 1)).contiguous().view(-1, 1))
 
@@ -50,19 +39,10 @@ def create_non_matches(uv_a, uv_b_non_matches, multiplier):
 
 
 def descriptor_loss_sparse(descriptors, descriptors_warped, homographies,
-                           mask_valid=None, cell_size=8, device='cpu', descriptor_dist=4,
+                           mask_valid=None, cell_size=8, device='gpu', descriptor_dist=4,
                            lamda_d=250, num_matching_attempts=1000,
                            num_masked_non_matches_per_match=10,
                            dist='cos', method='1d', **config):
-    """
-    consider batches of descriptors
-    :param descriptors:
-        Output from descriptor head
-        tensor [descriptors, Hc, Wc]
-    :param descriptors_warped:
-        Output from descriptor head of warped image
-        tensor [descriptors, Hc, Wc]
-    """
 
     def uv_to_tuple(uv):
         return uv[:, 0], uv[:, 1]
@@ -90,7 +70,7 @@ def descriptor_loss_sparse(descriptors, descriptors_warped, homographies,
         return match_loss
 
     def get_non_matches_corr(img_b_shape, uv_a, uv_b_matches,
-                             num_masked_non_matches_per_match=10, device='cpu'):
+                             num_masked_non_matches_per_match=10, device='gpu'):
         uv_b_matches = uv_b_matches.squeeze()
         uv_b_matches_tuple = uv_to_tuple(uv_b_matches)
         uv_b_non_matches_tuple = (correspondence_finder.create_non_correspondences(
@@ -107,8 +87,8 @@ def descriptor_loss_sparse(descriptors, descriptors_warped, homographies,
         (non_match_loss, num_hard_negatives, non_matches_a_descriptors,
          non_matches_b_descriptors) = (PixelwiseContrastiveLoss.non_match_descriptor_loss(
             image_a_pred, image_b_pred,
-            non_matches_a.long().squeeze(),
-            non_matches_b.long().squeeze(),
+            paddle.to_tensor(non_matches_a, dtype=paddle.int64).squeeze(),
+            paddle.to_tensor(non_matches_b, dtype=paddle.int64).squeeze(),
             M=0.2, invert=True, dist=dist))
         non_match_loss = non_match_loss.sum() / (num_hard_negatives + 1)
         return non_match_loss
@@ -126,15 +106,15 @@ def descriptor_loss_sparse(descriptors, descriptors_warped, homographies,
         return descriptors
     image_a_pred = descriptor_reshape(descriptors)
     image_b_pred = descriptor_reshape(descriptors_warped)
-    uv_a = get_coor_cells(Hc, Wc, cell_size, uv=True, device='cpu')
+    uv_a = get_coor_cells(Hc, Wc, cell_size, uv=True, device='gpu')
     homographies_H = scale_homography_torch(homographies, img_shape, shift=\
         (-1, -1))
     uv_b_matches = warp_coor_cells_with_homographies(uv_a, homographies_H.
-        to('cpu'), uv=True, device='cpu')
+        to('cpu'), uv=True, device='gpu')
     uv_b_matches.round_()
     uv_b_matches = uv_b_matches.squeeze(0)
     uv_b_matches, mask = filter_points(uv_b_matches, paddle.to_tensor([Wc,
-        Hc]).to(device='cpu'), return_mask=True)
+        Hc]).to(device='gpu'), return_mask=True)
     uv_a = uv_a[mask]
     shuffle = True
     if not shuffle:
@@ -145,24 +125,23 @@ def descriptor_loss_sparse(descriptors, descriptors_warped, homographies,
     uv_a = uv_a[choice]
     uv_b_matches = uv_b_matches[choice]
     if method == '2d':
-        matches_a = normPts(uv_a, paddle.to_tensor([Wc, Hc]).float())
-        matches_b = normPts(uv_b_matches, paddle.to_tensor([Wc, Hc]).float())
+        matches_a = normPts(uv_a, paddle.to_tensor([Wc, Hc], dtype=paddle.float32))
+        matches_b = normPts(uv_b_matches, paddle.to_tensor([Wc, Hc], dtype=paddle.float32))
     else:
         matches_a = uv_to_1d(uv_a, Wc)
         matches_b = uv_to_1d(uv_b_matches, Wc)
     if method == '2d':
         match_loss = get_match_loss(descriptors, descriptors_warped,
-            matches_a.to(device), matches_b.to(device), dist=dist, method='2d')
+            matches_a, matches_b, dist=dist, method='2d')
     else:
-        match_loss = get_match_loss(image_a_pred, image_b_pred, matches_a.
-            long().to(device), matches_b.long().to(device), dist=dist)
+        match_loss = get_match_loss(image_a_pred, image_b_pred, paddle.to_tensor(matches_a, dtype=paddle.int64), paddle.to_tensor(matches_b, dtype=paddle.int64), dist=dist)
     uv_a_tuple, uv_b_non_matches_tuple = get_non_matches_corr(img_shape,
         uv_a, uv_b_matches, num_masked_non_matches_per_match=\
         num_masked_non_matches_per_match)
     non_matches_a = tuple_to_1d(uv_a_tuple, Wc)
     non_matches_b = tuple_to_1d(uv_b_non_matches_tuple, Wc)
     non_match_loss = get_non_match_loss(image_a_pred, image_b_pred,
-        non_matches_a.to(device), non_matches_b.to(device), dist=dist)
+        non_matches_a, non_matches_b, dist=dist)
     loss = lamda_d * match_loss + non_match_loss
     return loss, lamda_d * match_loss, non_match_loss
     pass
@@ -194,7 +173,7 @@ if __name__ == '__main__':
     paddle.seed(0)
     np.random.seed(0)
     batch_size = 2
-    device = 'cpu'
+    device = 'gpu'
     method = '2d'
     num_matching_attempts = 1000
     num_masked_non_matches_per_match = 200

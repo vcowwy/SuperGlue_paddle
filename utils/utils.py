@@ -86,6 +86,7 @@ def tensor2array(tensor, max_value=255, colormap='rainbow', channel_first=True):
 def find_files_with_ext(directory, extension='.npz'):
     list_of_files = []
     import os
+
     if extension == '.npz':
         for l in os.listdir(directory):
             if l.endswith(extension):
@@ -122,24 +123,28 @@ def saveLoss(filename, iter, loss, task='train', **options):
 
 def saveImg(img, filename):
     import cv2
+
     cv2.imwrite(filename, img)
 
 
 def pltImshow(img):
     from matplotlib import pyplot as plt
+
     plt.imshow(img)
     plt.show()
 
 
 def loadConfig(filename):
     import yaml
+
     with open(filename, 'r') as f:
-        config = yaml.load(f)
+        config = yaml.load(f, Loader=yaml.FullLoader)
     return config
 
 
 def append_csv(file='foo.csv', arr=[]):
     import csv
+
     with open(file, 'a') as f:
         writer = csv.writer(f)
         if type(arr[0]) is list:
@@ -147,8 +152,6 @@ def append_csv(file='foo.csv', arr=[]):
                 writer.writerow(a)
         else:
             writer.writerow(arr)
-
-
 
 
 def sample_homography(inv_scale=3):
@@ -161,48 +164,32 @@ def sample_homography(inv_scale=3):
     return matrix
 
 
-def sample_homographies(batch_size=1, scale=10, device='cpu'):
+def sample_homographies(batch_size=1, scale=10, device='gpu'):
     mat_H = [sample_homography(inv_scale=scale) for i in range(batch_size)]
     mat_H = np.stack(mat_H, axis=0)
     mat_H = paddle.to_tensor(mat_H, dtype=paddle.float32)
-    mat_H = mat_H.to(device)
+    mat_H = mat_H
     mat_H_inv = paddle.stack([paddle.inverse(mat_H[i, :, :]) for i in range(batch_size)])
     mat_H_inv = paddle.to_tensor(mat_H_inv, dtype=paddle.float32)
-    mat_H_inv = mat_H_inv.to(device)
+    mat_H_inv = mat_H_inv
     return mat_H, mat_H_inv
 
 
 def warpLabels(pnts, homography, H, W):
     import paddle
-    """
-    input:
-        pnts: numpy
-        homography: numpy
-    output:
-        warped_pnts: numpy
-    """
     from utils.utils import warp_points
     from utils.utils import filter_points
-    pnts = paddle.to_tensor(pnts).long()
+
+    pnts = paddle.to_tensor(pnts, dtype=paddle.int64)
     homography = paddle.to_tensor(homography, dtype=paddle.float32)
     warped_pnts = warp_points(paddle.stack((pnts[:, (0)], pnts[:, (1)]),
         axis=1), homography)
-    warped_pnts = filter_points(warped_pnts, paddle.to_tensor([W, H])).round(
-        ).long()
+    warped_pnts = paddle.to_tensor(filter_points(warped_pnts, paddle.to_tensor([W, H])).round(
+        ), dtype=paddle.int64)
     return warped_pnts.numpy()
 
 
-def warp_points_np(points, homographies, device='cpu'):
-    """
-    Warp a list of points with the given homography.
-
-    Arguments:
-        points: list of N points, shape (N, 2).
-        homography: batched or not (shapes (B, 3, 3) and ... respectively).
-
-    Returns: a Tensor of shape (N, 2) or (B, N, 2) (depending on whether the homography
-            is batched) containing the new coordinates of the warped points.
-    """
+def warp_points_np(points, homographies, device='gpu'):
     batch_size = homographies.shape[0]
     points = np.concatenate((points, np.ones((points.shape[0], 1))), axis=1)
     warped_points = np.tensordot(homographies, points.transpose(), axes=([2
@@ -222,111 +209,57 @@ def homography_scaling(homography, H, W):
 def homography_scaling_torch(homography, H, W):
     trans = paddle.to_tensor([[2.0 / W, 0.0, -1], [0.0, 2.0 / H, -1], [0.0,
         0.0, 1.0]])
-    homography = trans.inverse() @ homography @ trans
+    homography = paddle.matmul(paddle.matmul(trans.inverse(), homography), trans)
     return homography
 
 
 def filter_points(points, shape, return_mask=False):
-    points = points.float()
-    shape = shape.float()
-    mask = (points >= 0) * (points <= shape - 1)
+    points = paddle.to_tensor(points, dtype=paddle.float32)
+    shape = paddle.to_tensor(shape, dtype=paddle.float32)
+    mask = paddle.to_tensor(paddle.logical_and(points >= 0, points <= shape - 1), dtype=paddle.int32)
     mask = (paddle.prod(mask, axis=-1) == 1)
+    mask = paddle.to_tensor(mask, dtype=paddle.int64)
     if return_mask:
         return points[mask], mask
     return points[mask]
 
 
-def warp_points(points, homographies, device='cpu'):
-    """
-    Warp a list of points with the given homography.
-
-    Arguments:
-        points: list of N points, shape (N, 2(x, y))).
-        homography: batched or not (shapes (B, 3, 3) and ... respectively).
-
-    Returns: a Tensor of shape (N, 2) or (B, N, 2(x, y)) (depending on whether the homography
-            is batched) containing the new coordinates of the warped points.
-
-    """
+def warp_points(points, homographies, device='gpu'):
     no_batches = len(homographies.shape) == 2
     homographies = homographies.unsqueeze(0) if no_batches else homographies
     batch_size = homographies.shape[0]
-    points = paddle.concat((points.float(), paddle.ones((points.shape
-        [0], 1)).requires_grad_(False).to(device)), axis=1)
-    points = points.to(device)
-    homographies = homographies.view(batch_size * 3, 3)
-    warped_points = homographies @ points.transpose(0, 1)
-    warped_points = warped_points.view([batch_size, 3, -1])
-    warped_points = warped_points.transpose(2, 1)
+    points = paddle.concat((paddle.to_tensor(points, dtype=paddle.float32), paddle.ones([points.shape[0], 1])), axis=1)
+    homographies = paddle.reshape(homographies, shape=[batch_size * 3, 3])
+    warped_points = paddle.matmul(homographies, paddle.transpose(points, perm=[1, 0]))
+    warped_points = paddle.reshape(warped_points, shape=[batch_size, 3, -1])
+    warped_points = paddle.transpose(warped_points, perm=[0, 2, 1])
     warped_points = warped_points[:, :, :2] / warped_points[:, :, 2:]
     return warped_points[0, :, :] if no_batches else warped_points
 
 
 def inv_warp_image_batch(img, mat_homo_inv, device='cpu', mode='bilinear'):
-    """
-    Inverse warp images in batch
-
-    :param img:
-        batch of images
-        tensor [batch_size, 1, H, W]
-    :param mat_homo_inv:
-        batch of homography matrices
-        tensor [batch_size, 3, 3]
-    :param device:
-        GPU device or CPU
-    :return:
-        batch of warped images
-        tensor [batch_size, 1, H, W]
-    """
     if len(img.shape) == 2 or len(img.shape) == 3:
-        img = img.view(1, 1, img.shape[0], img.shape[1])
+        img = paddle.reshape(img, shape=[1, 1, img.shape[0], img.shape[1]])
     if len(mat_homo_inv.shape) == 2:
-        mat_homo_inv = mat_homo_inv.view(1, 3, 3)
+        mat_homo_inv = paddle.reshape(mat_homo_inv, shape=[1, 3, 3])
     Batch, channel, H, W = img.shape
     coor_cells = paddle.stack(paddle.meshgrid(paddle.linspace(-1, 1, W), paddle.linspace(-1, 1, H)), axis=2)
     coor_cells = coor_cells.transpose(0, 1)
-    coor_cells = coor_cells.to(device)
+    coor_cells = coor_cells
     coor_cells = coor_cells.contiguous()
-    src_pixel_coords = warp_points(coor_cells.view([-1, 2]), mat_homo_inv,
-        device)
-    src_pixel_coords = src_pixel_coords.view([Batch, H, W, 2])
-    src_pixel_coords = src_pixel_coords.float()
+    src_pixel_coords = warp_points(paddle.reshape(coor_cells, shape=[-1, 2]), mat_homo_inv, device)
+    src_pixel_coords = paddle.reshape(src_pixel_coords, shape=[Batch, H, W, 2])
+    src_pixel_coords = paddle.to_tensor(src_pixel_coords, dtype=paddle.float32)
     warped_img = F.grid_sample(img, src_pixel_coords, mode=mode, align_corners=True)
     return warped_img
 
 
-def inv_warp_image(img, mat_homo_inv, device='cpu', mode='bilinear'):
-    """
-    Inverse warp images in batch
-
-    :param img:
-        batch of images
-        tensor [H, W]
-    :param mat_homo_inv:
-        batch of homography matrices
-        tensor [3, 3]
-    :param device:
-        GPU device or CPU
-    :return:
-        batch of warped images
-        tensor [H, W]
-    """
+def inv_warp_image(img, mat_homo_inv, device='gpu', mode='bilinear'):
     warped_img = inv_warp_image_batch(img, mat_homo_inv, device, mode)
     return warped_img.squeeze()
 
 
 def labels2Dto3D(labels, cell_size, add_dustbin=True):
-    """
-    Change the shape of labels into 3D. Batch of labels.
-
-    :param labels:
-        tensor [batch_size, 1, H, W]
-        keypoint map.
-    :param cell_size:
-        8
-    :return:
-         labels: tensors[batch_size, 65, Hc, Wc]
-    """
     batch_size, channel, H, W = labels.shape
     Hc, Wc = H // cell_size, W // cell_size
     space2depth = SpaceToDepth(8)
@@ -335,50 +268,26 @@ def labels2Dto3D(labels, cell_size, add_dustbin=True):
         dustbin = labels.sum(dim=1)
         dustbin = 1 - dustbin
         dustbin[dustbin < 1.0] = 0
-        labels = paddle.concat((labels, dustbin.view(batch_size, 1,
-            Hc, Wc)), axis=1)
+        labels = paddle.concat((labels, paddle.reshape(dustbin, shape=[batch_size, 1,
+            Hc, Wc])), axis=1)
         dn = labels.sum(dim=1)
         labels = labels.div(paddle.unsqueeze(dn, 1))
     return labels
 
 
 def labels2Dto3D_flattened(labels, cell_size):
-    """
-    Change the shape of labels into 3D. Batch of labels.
-
-    :param labels:
-        tensor [batch_size, 1, H, W]
-        keypoint map.
-    :param cell_size:
-        8
-    :return:
-         labels: tensors[batch_size, 65, Hc, Wc]
-    """
     batch_size, channel, H, W = labels.shape
     Hc, Wc = H // cell_size, W // cell_size
     space2depth = SpaceToDepth(8)
     labels = space2depth(labels)
     dustbin = paddle.ones((batch_size, 1, Hc, Wc)).requires_grad_(False).cuda()
-    labels = paddle.concat((labels * 2, dustbin.view(batch_size, 1,
-        Hc, Wc)), axis=1)
+    labels = paddle.concat((labels * 2, paddle.reshape(dustbin, shape=[batch_size, 1,
+        Hc, Wc])), axis=1)
     labels = paddle.argmax(labels, axis=1)
     return labels
 
 
 def old_flatten64to1(semi, tensor=False):
-    """
-    Flatten 3D np array to 2D
-
-    :param semi:
-        np [64 x Hc x Wc]
-        or
-        tensor (batch_size, 65, Hc, Wc)
-    :return:
-        flattened map
-        np [1 x Hc*8 x Wc*8]
-        or
-        tensor (batch_size, 1, Hc*8, Wc*8)
-    """
     if tensor:
         is_batch = len(semi.size()) == 4
         if not is_batch:
@@ -387,10 +296,10 @@ def old_flatten64to1(semi, tensor=False):
         cell = 8
         semi.transpose_(1, 2)
         semi.transpose_(2, 3)
-        semi = semi.view(-1, Hc, Wc, cell, cell)
+        semi = paddle.reshape(semi, shape=[-1, Hc, Wc, cell, cell])
         semi.transpose_(2, 3)
         semi = semi.contiguous()
-        semi = semi.view(-1, 1, Hc * cell, Wc * cell)
+        semi = paddle.reshape(semi, shape=[-1, 1, Hc * cell, Wc * cell])
         heatmap = semi
         if not is_batch:
             heatmap = heatmap.squeeze_(0)
@@ -406,22 +315,6 @@ def old_flatten64to1(semi, tensor=False):
 
 
 def flattenDetection(semi, tensor=False):
-    """
-    Flatten detection output
-
-    :param semi:
-        output from detector head
-        tensor [65, Hc, Wc]
-        :or
-        tensor (batch_size, 65, Hc, Wc)
-
-    :return:
-        3D heatmap
-        np (1, H, C)
-        :or
-        tensor (batch_size, 65, Hc, Wc)
-
-    """
     batch = False
     if len(semi.shape) == 4:
         batch = True
@@ -437,9 +330,8 @@ def flattenDetection(semi, tensor=False):
     heatmap = heatmap.squeeze(0) if not batch else heatmap
     return heatmap
 
-
+"""
 def sample_homo(image):
-    import tensorflow as tf
     from utils.homographies import sample_homography
     H = sample_homography(tf.shape(image)[:2])
     with tf.Session():
@@ -447,18 +339,12 @@ def sample_homo(image):
     H_ = np.concatenate((H_, np.array([1])[:, np.newaxis]), axis=1)
     mat = np.reshape(H_, (3, 3))
     return mat
-
+"""
 
 import cv2
 
 
 def getPtsFromHeatmap(heatmap, conf_thresh, nms_dist):
-    """
-    :param self:
-    :param heatmap:
-        np (H, W)
-    :return:
-    """
     border_remove = 4
     H, W = heatmap.shape[0], heatmap.shape[1]
     xs, ys = np.where(heatmap >= conf_thresh)
@@ -482,55 +368,25 @@ def getPtsFromHeatmap(heatmap, conf_thresh, nms_dist):
 
 def box_nms(prob, size, iou=0.1, min_prob=0.01, keep_top_k=0):
     from torchvision.ops import nms
-    """Performs non maximum suppression on the heatmap by considering hypothetical
-    bounding boxes centered at each pixel's location (e.g. corresponding to the receptive
-    field). Optionally only keeps the top k detections.
-    Arguments:
-    prob: the probability heatmap, with shape `[H, W]`.
-    size: a scalar, the size of the bouding boxes.
-    iou: a scalar, the IoU overlap threshold.
-    min_prob: a threshold under which all probabilities are discarded before NMS.
-    keep_top_k: an integer, the number of top scores to keep.
-    """
-    pts = paddle.nonzero(prob > min_prob).float() # [N, 2]
+
+    pts = paddle.to_tensor(paddle.nonzero(prob > min_prob), dtype=paddle.float32) # [N, 2]
     prob_nms = paddle.full_like(prob).requires_grad_(False)
     if pts.nelement() == 0:
         return prob_nms
     size = paddle.to_tensor(size / 2.0).cuda()
     boxes = paddle.concat([pts - size, pts + size], axis=1)
-    scores = prob[pts[:, 0].long(), pts[:, 1].long()]
+    scores = prob[paddle.to_tensor(pts[:, 0], dtype=paddle.int64), paddle.to_tensor(pts[:, 1], dtype=paddle.int64)]
     if keep_top_k != 0:
         indices = nms(boxes, scores, iou)
     else:
         raise NotImplementedError
     pts = paddle.index_select(pts, 0, indices)
     scores = paddle.index_select(scores, 0, indices)
-    prob_nms[pts[:, 0].long(), pts[:, 1].long()] = scores
+    prob_nms[paddle.to_tensor(pts[:, 0], dtype=paddle.int64), paddle.to_tensor(pts[:, 1], dtype=paddle.int64)] = scores
     return prob_nms
 
 
 def nms_fast(in_corners, H, W, dist_thresh):
-    """
-    Run a faster approximate Non-Max-Suppression on numpy corners shaped:
-      3xN [x_i,y_i,conf_i]^T
-    Algo summary: Create a grid sized HxW. Assign each corner location a 1, rest
-    are zeros. Iterate through all the 1's and convert them either to -1 or 0.
-    Suppress points by setting nearby values to 0.
-    Grid Value Legend:
-    -1 : Kept.
-     0 : Empty or suppressed.
-     1 : To be processed (converted to either kept or supressed).
-    NOTE: The NMS first rounds points to integers, so NMS distance might not
-    be exactly dist_thresh. It also assumes points are within image boundaries.
-    Inputs
-      in_corners - 3xN numpy array with corners [x_i, y_i, confidence_i]^T.
-      H - Image height.
-      W - Image width.
-      dist_thresh - Distance to suppress, measured as an infinty norm distance.
-    Returns
-      nmsed_corners - 3xN numpy matrix with surviving corners.
-      nmsed_inds - N length numpy vector with surviving corner indices.
-    """
     grid = np.zeros((H, W)).astype(int)
     inds = np.zeros((H, W)).astype(int)
     inds1 = np.argsort(-in_corners[2, :])
@@ -564,86 +420,37 @@ def nms_fast(in_corners, H, W, dist_thresh):
     return out, out_inds
 
 
-def compute_valid_mask(image_shape, inv_homography, device='cpu',
-    erosion_radius=0):
-    """
-    Compute a boolean mask of the valid pixels resulting from an homography applied to
-    an image of a given shape. Pixels that are False correspond to bordering artifacts.
-    A margin can be discarded using erosion.
-
-    Arguments:
-        input_shape: Tensor of rank 2 representing the image shape, i.e. `[H, W]`.
-        homography: Tensor of shape (B, 8) or (8,), where B is the batch size.
-        `erosion_radius: radius of the margin to be discarded.
-
-    Returns: a Tensor of type `tf.int32` and shape (H, W).
-    """
+def compute_valid_mask(image_shape, inv_homography, device='gpu', erosion_radius=0):
     if inv_homography.dim() == 2:
-        inv_homography = inv_homography.view(-1, 3, 3)
+        inv_homography = paddle.reshape(inv_homography, shape=[-1, 3, 3])
     batch_size = inv_homography.shape[0]
     mask = paddle.ones([batch_size, 1, image_shape[0], image_shape[1]]
-        ).requires_grad_(False).to(device)
+        ).requires_grad_(False)
     mask = inv_warp_image_batch(mask, inv_homography, device=device, mode='nearest')
-    mask = mask.view(batch_size, image_shape[0], image_shape[1])
+    mask = paddle.reshape(mask, shape=[batch_size, image_shape[0], image_shape[1]])
     mask = mask.cpu().numpy()
     if erosion_radius > 0:
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,
                                            (erosion_radius * 2,) * 2)
         for i in range(batch_size):
             mask[i, :, :] = cv2.erode(mask[i, :, :], kernel, iterations=1)
-    return paddle.to_tensor(mask).to(device)
+    return paddle.to_tensor(mask)
 
 
 def normPts(pts, shape):
-    """
-    normalize pts to [-1, 1]
-    :param pts:
-        tensor (y, x)
-    :param shape:
-        tensor shape (y, x)
-    :return:
-    """
     pts = pts / shape * 2 - 1
     return pts
 
 
 def denormPts(pts, shape):
-    """
-    denormalize pts back to H, W
-    :param pts:
-        tensor (y, x)
-    :param shape:
-        numpy (y, x)
-    :return:
-    """
     pts = (pts + 1) * shape / 2
     return pts
 
 
-def descriptor_loss(descriptors, descriptors_warped, homographies,
-    mask_valid=None, cell_size=8, lamda_d=250, device='cpu',
-    descriptor_dist=4, **config):
-    """
-    Compute descriptor loss from descriptors_warped and given homographies
-
-    :param descriptors:
-        Output from descriptor head
-        tensor [batch_size, descriptors, Hc, Wc]
-    :param descriptors_warped:
-        Output from descriptor head of warped image
-        tensor [batch_size, descriptors, Hc, Wc]
-    :param homographies:
-        known homographies
-    :param cell_size:
-        8
-    :param device:
-        gpu or cpu
-    :param config:
-    :return:
-        loss, and other tensors for visualization
-    """
-    homographies = homographies.to(device)
+def descriptor_loss(descriptors, descriptors_warped, homographies, mask_valid=None, cell_size=8, lamda_d=250, device='gpu', descriptor_dist=4, **config):
+    homographies = homographies
     from utils.utils import warp_points
+
     lamda_d = lamda_d
     margin_pos = 1
     margin_neg = 0.2
@@ -651,41 +458,41 @@ def descriptor_loss(descriptors, descriptors_warped, homographies,
         ], descriptors.shape[3]
     H, W = Hc * cell_size, Wc * cell_size
     with paddle.no_grad():
-        shape = paddle.to_tensor([H, W], dtype=paddle.float32).to(device)
+        shape = paddle.to_tensor([H, W], dtype=paddle.float32)
 
         coor_cells = paddle.stack(paddle.meshgrid(paddle.arange(Hc), paddle.arange(Wc)), axis=2)
-        coor_cells = paddle.to_tensor(coor_cells, dtype=paddle.float32).to(device)
+        coor_cells = paddle.to_tensor(coor_cells, dtype=paddle.float32)
         coor_cells = coor_cells * cell_size + cell_size // 2
 
-        coor_cells = coor_cells.view([-1, 1, 1, Hc, Wc, 2])
-        warped_coor_cells = normPts(coor_cells.view([-1, 2]), shape)
+        coor_cells = paddle.reshape(coor_cells, shape=[-1, 1, 1, Hc, Wc, 2])
+        warped_coor_cells = normPts(paddle.reshape(coor_cells, shape=[-1, 2]), shape)
         warped_coor_cells = paddle.stack((warped_coor_cells[:, (1)], warped_coor_cells[:, (0)]), axis=1)
         warped_coor_cells = warp_points(warped_coor_cells, homographies, device)
 
         warped_coor_cells = paddle.stack((warped_coor_cells[:, :, (1)], warped_coor_cells[:, :, (0)]), axis=2)
-        shape_cell = paddle.to_tensor([H // cell_size, W // cell_size], dtype=paddle.float32).to(device)
+        shape_cell = paddle.to_tensor([H // cell_size, W // cell_size], dtype=paddle.float32)
 
         warped_coor_cells = denormPts(warped_coor_cells, shape)
-        warped_coor_cells = warped_coor_cells.view([-1, Hc, Wc, 1, 1, 2])
+        warped_coor_cells = paddle.reshape(warped_coor_cells, shape=[-1, Hc, Wc, 1, 1, 2])
 
         cell_distances = coor_cells - warped_coor_cells
         cell_distances = paddle.norm(cell_distances, axis=-1)
         mask = cell_distances <= descriptor_dist
 
-        mask = paddle.to_tensor(mask, dtype=paddle.float32).to(device)
+        mask = paddle.to_tensor(mask, dtype=paddle.float32)
 
     descriptors = descriptors.transpose(1, 2).transpose(2, 3)
-    descriptors = descriptors.view((batch_size, Hc, Wc, 1, 1, -1))
+    descriptors = paddle.reshape(descriptors, shape=[batch_size, Hc, Wc, 1, 1, -1])
     descriptors_warped = descriptors_warped.transpose(1, 2).transpose(2, 3)
-    descriptors_warped = descriptors_warped.view((batch_size, 1, 1, Hc, Wc, -1))
+    descriptors_warped = paddle.reshape(descriptors_warped, shape=[batch_size, 1, 1, Hc, Wc, -1])
     dot_product_desc = descriptors * descriptors_warped
     dot_product_desc = dot_product_desc.sum(dim=-1)
-    positive_dist = paddle.max(margin_pos - dot_product_desc, paddle.to_tensor(0.0).to(device))
-    negative_dist = paddle.max(dot_product_desc - margin_neg, paddle.to_tensor(0.0).to(device))
+    positive_dist = paddle.max(margin_pos - dot_product_desc, paddle.to_tensor(0.0))
+    negative_dist = paddle.max(dot_product_desc - margin_neg, paddle.to_tensor(0.0))
 
     if mask_valid is None:
         mask_valid = paddle.ones([batch_size, 1, Hc * cell_size, Wc * cell_size]).requires_grad_(False)
-    mask_valid = mask_valid.view(batch_size, 1, 1, mask_valid.shape[2], mask_valid.shape[3])
+    mask_valid = paddle.reshape(mask_valid, shape=[batch_size, 1, 1, mask_valid.shape[2], mask_valid.shape[3]])
 
     loss_desc = lamda_d * mask * positive_dist + (1 - mask) * negative_dist
     loss_desc = loss_desc * mask_valid
@@ -740,15 +547,6 @@ def getWriterPath(task='train', exper_name='', date=True):
 
 
 def crop_or_pad_choice(in_num_points, out_num_points, shuffle=False):
-    """Crop or pad point cloud to a fixed number; return the indexes
-    Args:
-        points (np.ndarray): point cloud. (n, d)
-        num_points (int): the number of output points
-        shuffle (bool): whether to shuffle the order
-    Returns:
-        np.ndarray: output point cloud
-        np.ndarray: index to choose input points
-    """
     if shuffle:
         choice = np.random.permutation(in_num_points)
     else:

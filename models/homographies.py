@@ -1,8 +1,9 @@
 import cv2 as cv
 from math import pi
 
-import tensorflow as tf
-from tensorflow.contrib.image import transform as H_transform
+import paddle
+#import tensorflow as tf
+#from tensorflow.contrib.image import transform as H_transform
 from utils.tools import dict_update
 
 homography_adaptation_default_config = {'num': 1, 'aggregation': 'sum',

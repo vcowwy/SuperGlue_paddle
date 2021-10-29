@@ -25,7 +25,7 @@ from utils.utils import save_checkpoint
 @paddle.no_grad()
 class Val_model_subpixel(object):
 
-    def __init__(self, config, device='cpu', verbose=False):
+    def __init__(self, config, device='gpu', verbose=False):
         self.config = config
         self.model = self.config['name']
         self.params = self.config['params']
@@ -38,7 +38,7 @@ class Val_model_subpixel(object):
         self.net = modelLoader(model=self.model, **self.params)
 
         checkpoint = paddle.load(self.weights_path)
-        self.net.load_state_dict(checkpoint['model_state_dict'])
+        self.net.load_dict(checkpoint['model_state_dict'])
 
         self.net = self.net.to(self.device)
         logging.info('successfully load pretrained model from: %s',
@@ -46,11 +46,6 @@ class Val_model_subpixel(object):
         pass
 
     def extract_patches(self, label_idx, img):
-        """
-        input: 
-            label_idx: tensor [N, 4]: (batch, 0, y, x)
-            img: tensor [batch, channel(1), H, W]
-        """
         from utils.losses import extract_patches
         patch_size = self.config['params']['patch_size']
         patches = extract_patches(label_idx.to(self.device),
@@ -67,7 +62,6 @@ class Val_model_subpixel(object):
 
 
 if __name__ == '__main__':
-    # filename = 'configs/magicpoint_shapes_subpix.yaml'
     filename = 'configs/magicpoint_repeatability.yaml'
     import yaml
 
@@ -78,7 +72,7 @@ if __name__ == '__main__':
     paddle.set_default_dtype('float32')
 
     with open(filename, 'r') as f:
-        config = yaml.load(f)
+        config = yaml.load(f, Loader=yaml.FullLoader)
 
     task = config['data']['dataset']
 
@@ -99,8 +93,8 @@ if __name__ == '__main__':
 
         def points_to_4d(points):
             num_of_points = points.shape[0]
-            cols = paddle.zeros([num_of_points, 1]).requires_grad_(False).float()
-            points = paddle.concat((cols, cols, points.float()), axis=1)
+            cols = paddle.to_tensor(paddle.zeros([num_of_points, 1]).requires_grad_(False), dtype=paddle.float32)
+            points = paddle.concat((cols, cols, paddle.to_tensor(points, dtype=paddle.float32)), axis=1)
             return points
         label_idx = points_to_4d(points)
 

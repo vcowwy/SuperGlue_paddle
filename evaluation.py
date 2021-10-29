@@ -2,6 +2,8 @@
 This is the evaluation script for image denoising project.
 """
 import matplotlib
+import paddle.device
+
 matplotlib.use('Agg')
 
 import numpy as np
@@ -32,10 +34,13 @@ def draw_matches_cv(data, matches, plot_points=True):
         if img.ndim == 2:
             img = img[:, :, np.newaxis]
         return img
+
     img1 = to3dim(data['image1'])
     img2 = to3dim(data['image2'])
     img1 = np.concatenate([img1, img1, img1], axis=2)
     img2 = np.concatenate([img2, img2, img2], axis=2)
+    img1 = np.uint8(img1*255.0)
+    img2 = np.uint8(img2*255.0)
     return cv2.drawMatches(img1, keypoints1, img2, keypoints2, matches,
                            None, matchColor=(0, 255, 0), singlePointColor=(0, 0, 255))
 
@@ -147,20 +152,13 @@ def evaluate(args, **options):
 
             def warpLabels(pnts, homography, H, W):
                 import paddle
-                """
-                input:
-                    pnts: numpy
-                    homography: numpy
-                output:
-                    warped_pnts: numpy
-                """
-                from utils import warp_points
-                from utils import filter_points
-                pnts = paddle.to_tensor(pnts).long()
+                from utils.utils import warp_points
+                from utils.utils import filter_points
+                
+                pnts = paddle.to_tensor(pnts, dtype=paddle.int64)
                 homography = paddle.to_tensor(homography, dtype=paddle.float32)
-                warped_pnts = warp_points(paddle.stack((pnts[:, (0)], pnts[:, (1)]), axis=1),
-                                          homography)
-                warped_pnts = filter_points(warped_pnts, paddle.to_tensor([W, H])).round().long()
+                warped_pnts = warp_points(paddle.stack((pnts[:, (0)], pnts[:, (1)]), axis=1), homography)
+                warped_pnts = paddle.to_tensor(filter_points(warped_pnts, paddle.to_tensor([W, H])).round(), dtype=paddle.int64)
                 return warped_pnts.numpy()
 
             from numpy.linalg import inv
@@ -194,11 +192,6 @@ def evaluate(args, **options):
                     return matches, mscores
 
                 def getInliers(matches, H, epi=3, verbose=False):
-                    """
-                    input:
-                        matches: numpy (n, 4(x1, y1, x2, y2))
-                        H (ground truth homography): numpy (3, 3)
-                    """
                     from evaluations.detector_evaluation import warp_keypoints
 
                     warped_points = warp_keypoints(matches[:, :2], H)
@@ -386,6 +379,7 @@ def evaluate(args, **options):
 
 
 if __name__ == '__main__':
+    paddle.device.set_device('gpu')
     import argparse
 
     logging.basicConfig(format='[%(asctime)s %(levelname)s] %(message)s',

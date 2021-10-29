@@ -2,12 +2,12 @@
 logs/magicpoint_synth20/checkpoints/superPointNet_200000_checkpoint.pdiparams.tar
 
 """
-from models.unet_parts import *
-
 import paddle
 
+from models.unet_parts import *
+from utils.t2p import SpatialSoftArgmax2d
+
 class SubpixelNet(paddle.nn.Layer):
-    """ Pytorch definition of SuperPoint Network. """
 
     def __init__(self, subpixel_channel=1):
         super(SubpixelNet, self).__init__()
@@ -37,27 +37,12 @@ class SubpixelNet(paddle.nn.Layer):
 
     @staticmethod
     def soft_argmax_2d(patches):
-        """
-    params:
-        patches: (B, N, H, W)
-    return:
-        coor: (B, N, 2)  (x, y)
 
-    """
-        import torchgeometry as tgm
-        m = tgm.contrib.SpatialSoftArgmax2d()
+        m = SpatialSoftArgmax2d()
         coords = m(patches)
         return coords
 
     def forward(self, x, subpixel=False):
-        """ Forward pass that jointly computes unprocessed point and descriptor
-    tensors.
-    Input
-      x: Image pytorch tensor shaped N x 1 x patch_size x patch_size.
-    Output
-      semi: Output point pytorch tensor shaped N x 65 x H/8 x W/8.
-      desc: Output descriptor pytorch tensor shaped N x 256 x H/8 x W/8.
-    """
         x1 = self.inc(x)
         x2 = self.down1(x1)
         x3 = self.down2(x2)
@@ -78,11 +63,10 @@ class SubpixelNet(paddle.nn.Layer):
 
 
 if __name__ == '__main__':
-    device = 'cuda' if paddle.is_compiled_with_cuda() else 'cpu'
-    device = device.replace('cuda', 'gpu')
-    device = paddle.set_device(device)
+
+    device = paddle.device.set_device('gpu')
     model = SubpixelNet()
-    model = model.to(device)
+    model = model
 
     from paddle import summary
     summary(model, input_size=(1, 240, 320))

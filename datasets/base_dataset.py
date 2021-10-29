@@ -1,6 +1,6 @@
 from abc import ABCMeta
 from abc import abstractmethod
-import tensorflow as tf
+#import tensorflow as tf
 from utils.tools import dict_update
 
 

@@ -70,14 +70,7 @@ class SuperPointNet(paddle.nn.Layer):
         self.bnDb = nn.GroupNorm(gn, d1) if useGn else nn.BatchNorm2D(d1)
 
     def forward(self, x, subpixel=False):
-        """ Forward pass that jointly computes unprocessed point and descriptor
-    tensors.
-    Input
-      x: Image pytorch tensor shaped N x 1 x H x W.
-    Output
-      semi: Output point pytorch tensor shaped N x 65 x H/8 x W/8.
-      desc: Output descriptor pytorch tensor shaped N x 256 x H/8 x W/8.
-    """
+
         if self.reBn:
             x = self.relu(self.bn1a(self.conv1a(x)))
             conv1 = self.relu(self.bn1b(self.conv1b(x)))
@@ -119,14 +112,7 @@ class SuperPointNet(paddle.nn.Layer):
 
 
 def forward_original(self, x):
-    """ Forward pass that jointly computes unprocessed point and descriptor
-    tensors.
-    Input
-      x: Image pytorch tensor shaped N x 1 x H x W.
-    Output
-      semi: Output point pytorch tensor shaped N x 65 x H/8 x W/8.
-      desc: Output descriptor pytorch tensor shaped N x 256 x H/8 x W/8.
-    """
+
     x = self.relu(self.conv1a(x))
     x = self.relu(self.conv1b(x))
     x = self.pool(x)
@@ -143,7 +129,7 @@ def forward_original(self, x):
     cDa = self.relu(self.convDa(x))
     desc = self.convDb(cDa)
     dn = paddle.norm(desc, p=2, axis=1) # Compute the norm.
-    desc = desc.div(paddle.unsqueeze(dn, 1))
+    desc = paddle.divide(desc, paddle.unsqueeze(dn, 1))
     return semi, desc
 
 
@@ -158,10 +144,9 @@ def upconv(in_planes, out_planes):
 
 
 if __name__ == '__main__':
-    device = 'cuda' if paddle.is_compiled_with_cuda() else 'cpu'
-    device = device.replace('cuda', 'gpu')
-    device = paddle.set_device(device)
+
+    device = paddle.set_device('gpu')
     model = SuperPointNet()
-    model = model.to(device)
+    model = model
     from paddle import summary
     summary(model, input_size=(1, 224, 224))

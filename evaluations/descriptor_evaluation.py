@@ -9,22 +9,12 @@ from settings import EXPER_PATH
 
 
 def get_paths(exper_name):
-    """
-    Return a list of paths to the outputs of the experiment.
-    """
     return glob(osp.join(EXPER_PATH, 'outputs/{}/*.npz'.format(exper_name)))
 
 
 def keep_shared_points(keypoint_map, H, keep_k_points=1000):
-    """
-    Compute a list of keypoints from the map, filter the list of points by keeping
-    only the points that once mapped by H are still inside the shape of the map
-    and keep at most 'keep_k_points' keypoints in the image.
-    """
 
     def select_k_best(points, k):
-        """ Select the k most probable points (and strip their proba).
-        points has shape (num_points, 3) where the last coordinate is the proba. """
         sorted_prob = points[points[:, (2)].argsort(), :2]
         start = min(k, points.shape[0])
         return sorted_prob[-start:, :]
@@ -36,8 +26,6 @@ def keep_shared_points(keypoint_map, H, keep_k_points=1000):
         return warped_points[:, :2] / warped_points[:, 2:]
 
     def keep_true_keypoints(points, H, shape):
-        """ Keep only the points whose warped coordinates by H
-        are still inside shape. """
         warped_points = warp_keypoints(points[:, [1, 0]], H)
         warped_points[:, [0, 1]] = warped_points[:, [1, 0]]
         mask = (warped_points[:, 0] >= 0) & (warped_points[:, 0] < shape[0]
@@ -53,11 +41,8 @@ def keep_shared_points(keypoint_map, H, keep_k_points=1000):
     return keypoints.astype(int)
 
 
-def compute_homography(data, keep_k_points=1000, correctness_thresh=3, orb=\
-    False, shape=(240, 320)):
-    """
-    Compute the homography between 2 sets of detections and descriptors inside data.
-    """
+def compute_homography(data, keep_k_points=1000, correctness_thresh=1, orb=False, shape=(240, 320)):
+
     print('shape: ', shape)
     real_H = data['homography']
 
@@ -125,14 +110,7 @@ def compute_homography(data, keep_k_points=1000, correctness_thresh=3, orb=\
             'mean_dist': mean_dist}
 
 
-def homography_estimation(exper_name, keep_k_points=1000,
-                          correctness_thresh=3, orb=False):
-    """
-    Estimates the homography between two images given the predictions.
-    The experiment must contain in its output the prediction on 2 images, an original
-    image and a warped version of it, plus the homography linking the 2 images.
-    Outputs the correctness score.
-    """
+def homography_estimation(exper_name, keep_k_points=1000, correctness_thresh=1, orb=False):
     paths = get_paths(exper_name)
     correctness = []
     for path in paths:
@@ -143,16 +121,8 @@ def homography_estimation(exper_name, keep_k_points=1000,
     return np.mean(correctness)
 
 
-def get_homography_matches(exper_name, keep_k_points=1000,
-    correctness_thresh=3, num_images=1, orb=False):
-    """
-    Estimates the homography between two images given the predictions.
-    The experiment must contain in its output the prediction on 2 images, an original
-    image and a warped version of it, plus the homography linking the 2 images.
-    Outputs the keypoints shared between the two views,
-    a mask of inliers points in the first image, and a list of matches meaning that
-    keypoints1[i] is matched with keypoints2[matches[i]]
-    """
+def get_homography_matches(exper_name, keep_k_points=1000, correctness_thresh=1, num_images=1, orb=False):
+
     paths = get_paths(exper_name)
     outputs = []
     for path in paths[:num_images]:

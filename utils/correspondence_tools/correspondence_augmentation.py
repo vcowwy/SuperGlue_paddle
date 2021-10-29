@@ -21,30 +21,6 @@ from utils.t2p import LongTensor
 
 
 def random_image_and_indices_mutation(images, uv_pixel_positions):
-    """
-    This function takes a list of images and a list of pixel positions in the image, 
-    and picks some subset of available mutations.
-
-    :param images: a list of images (for example the rgb, depth, and mask) for which the 
-                        **same** mutation will be applied
-    :type  images: list of PIL.image.image
-
-    :param uv_pixel_positions: pixel locations (u, v) in the image. 
-    	See doc/coordinate_conventions.md for definition of (u, v)
-
-    :type  uv_pixel_positions: a tuple of torch Tensors, each of length n, i.e:
-
-    	(u_pixel_positions, v_pixel_positions)
-
-    	Where each of the elements of the tuple are torch Tensors of length n
-
-    	Note: aim is to support both torch.LongTensor and torch.FloatTensor,
-    	      and return the mutated_uv_pixel_positions with same type
-
-    :return mutated_image_list, mutated_uv_pixel_positions
-    	:rtype: list of PIL.image.image, tuple of torch Tensors
-
-    """
     if random.random() < 0.5:
         return images, uv_pixel_positions
     else:
@@ -55,12 +31,6 @@ def random_image_and_indices_mutation(images, uv_pixel_positions):
 
 
 def flip_vertical(images, uv_pixel_positions):
-    """
-    Fip the images and the pixel positions vertically (flip up/down)
-
-    See random_image_and_indices_mutation() for documentation of args and return types.
-
-    """
     mutated_images = [ImageOps.flip(image) for image in images]
     v_pixel_positions = uv_pixel_positions[1]
     mutated_v_pixel_positions = image.height - 1 - v_pixel_positions
@@ -69,12 +39,6 @@ def flip_vertical(images, uv_pixel_positions):
 
 
 def flip_horizontal(images, uv_pixel_positions):
-    """
-    Randomly flip the image and the pixel positions horizontall (flip left/right)
-
-    See random_image_and_indices_mutation() for documentation of args and return types.
-
-    """
     mutated_images = [ImageOps.mirror(image) for image in images]
     u_pixel_positions = uv_pixel_positions[0]
     mutated_u_pixel_positions = image.width - 1 - u_pixel_positions
@@ -83,9 +47,6 @@ def flip_horizontal(images, uv_pixel_positions):
 
 
 def random_domain_randomize_background(image_rgb, image_mask):
-    """
-    Ranomly call domain_randomize_background
-    """
     if random.random() < 0.5:
         return image_rgb
     else:
@@ -93,19 +54,6 @@ def random_domain_randomize_background(image_rgb, image_mask):
 
 
 def domain_randomize_background(image_rgb, image_mask):
-    """
-    This function applies domain randomization to the non-masked part of the image.
-
-    :param image_rgb: rgb image for which the non-masked parts of the image will 
-                        be domain randomized
-    :type  image_rgb: PIL.image.image
-
-    :param image_mask: mask of part of image to be left alone, all else will be domain randomized
-    :type image_mask: PIL.image.image
-
-    :return domain_randomized_image_rgb:
-    :rtype: PIL.image.image
-    """
     image_rgb_numpy = np.asarray(image_rgb)
 
     image_mask_numpy = np.asarray(image_mask)
@@ -123,15 +71,6 @@ def domain_randomize_background(image_rgb, image_mask):
 
 
 def get_random_image(shape):
-    """
-    Expects something like shape=(480,640,3)
-
-    :param shape: tuple of shape for numpy array, for example from my_array.shape
-    :type shape: tuple of ints
-
-    :return random_image:
-    :rtype: np.ndarray
-    """
     if random.random() < 0.5:
         rand_image = get_random_solid_color_image(shape)
     else:
@@ -146,47 +85,18 @@ def get_random_image(shape):
 
 
 def get_random_rgb():
-    """
-    :return random rgb colors, each in range 0 to 255, for example [13, 25, 255]
-    :rtype: numpy array with dtype=np.uint8
-    """
     return np.array(np.random.uniform(size=3) * 255, dtype=np.uint8)
 
 
 def get_random_solid_color_image(shape):
-    """
-    Expects something like shape=(480,640,3)
-
-    :return random solid color image:
-    :rtype: numpy array of specificed shape, with dtype=np.uint8
-    """
     return np.ones(shape, dtype=np.uint8) * get_random_rgb()
 
 
 def get_random_entire_image(shape, max_pixel_uint8):
-    """
-    Expects something like shape=(480,640,3)
-
-    Returns an array of that shape, with values in range [0..max_pixel_uint8)
-
-    :param max_pixel_uint8: maximum value in the image
-    :type max_pixel_uint8: int
-
-    :return random solid color image:
-    :rtype: numpy array of specificed shape, with dtype=np.uint8
-    """
     return np.array(np.random.uniform(size=shape) * max_pixel_uint8, dtype=np.uint8)
 
 
 def get_gradient_image(rgb1, rgb2, vertical):
-    """
-    Interpolates between two images rgb1 and rgb2
-
-    :param rgb1, rgb2: two numpy arrays of shape (H,W,3)
-
-    :return interpolated image:
-    :rtype: same as rgb1 and rgb2
-    """
     bitmap = np.zeros_like(rgb1)
     h, w = rgb1.shape[0], rgb1.shape[1]
     if vertical:
@@ -200,17 +110,6 @@ def get_gradient_image(rgb1, rgb2, vertical):
 
 
 def add_noise(rgb_image):
-    """
-    Adds noise, and subtracts noise to the rgb_image
-
-    :param rgb_image: image to which noise will be added 
-    :type rgb_image: numpy array of shape (H,W,3)
-
-    :return image with noise:
-    :rtype: same as rgb_image
-
-    ## Note: do not need to clamp, since uint8 will just overflow -- not bad
-    """
     max_noise_to_add_or_subtract = 50
     return rgb_image + get_random_entire_image(rgb_image.shape,
                                                max_noise_to_add_or_subtract) - get_random_entire_image(rgb_image.shape,
@@ -218,33 +117,6 @@ def add_noise(rgb_image):
 
 
 def merge_images_with_occlusions(image_a, image_b, mask_a, mask_b, matches_pair_a, matches_pair_b):
-    """
-    This function will take image_a and image_b and "merge" them.
-
-    It will do this by:
-    - randomly selecting either image_a or image_b to be the background
-    - using the mask for the image that is not the background, it will put the other image on top.
-    - critically there are two separate sets of matches, one is associated with image_a and some other image,
-        and the other is associated with image_b and some other image.
-    - both of these sets of matches must be pruned for any occlusions that occur.
-
-    :param image_a, image_b: the two images to merge
-    :type image_a, image_b: each a PIL.image.image
-    :param mask_a, mask_b: the masks for these images
-    :type mask_a, mask_b: each a PIL.image.image
-    :param matches_a, matches_b:
-    :type matches_a, mathces_b: each a tuple of torch Tensors, each of length n, i.e:
-
-        (u_pixel_positions, v_pixel_positions)
-
-        Where each of the elements of the tuple are torch Tensors of length n
-
-        Note: only support torch.LongTensors
-
-    :return: merged image, merged_mask, pruned_matches_a, pruned_associated_matches_a, pruned_matches_b, pruned_associated_matches_b
-    :rtype: PIL.image.image, numpy array, rest are same types as matches_a and matches_b
-
-    """
     if random.random() < 0.5:
         foreground = 'B'
         background_image, background_mask, background_matches_pair = (image_a, mask_a, matches_pair_a)
@@ -286,26 +158,6 @@ def merge_images_with_occlusions(image_a, image_b, mask_a, mask_b, matches_pair_
 
 
 def prune_matches_if_occluded(foreground_mask_numpy, background_matches_pair):
-    """
-    Checks if any of the matches have been occluded.
-
-    If yes, prunes them from the list of matches.
-
-    NOTE:
-    - background_matches is a tuple
-    - the first element of the tuple HAS to be the one that we are actually checking for occlusions
-    - the second element of the tuple must also get pruned
-
-    :param foreground_mask_numpy: The mask of the foreground image
-    :type foreground_mask_numpy: numpy 2d array of shape (H,W)
-    :param background_matches: a tuple of torch Tensors, each of length n, i.e:
-
-        (u_pixel_positions, v_pixel_positions)
-
-        Where each of the elements of the tuple are torch Tensors of length n
-
-        Note: only support torch.LongTensors
-    """
     background_matches_a = background_matches_pair[0]
     background_matches_b = background_matches_pair[1]
 
@@ -329,15 +181,6 @@ def prune_matches_if_occluded(foreground_mask_numpy, background_matches_pair):
 
 
 def merge_matches(matches_one, matches_two):
-    """
-    :param matches_one, matches_two: each a tuple of torch Tensors, each of length n, i.e:
-
-        (u_pixel_positions, v_pixel_positions)
-
-        Where each of the elements of the tuple are torch Tensors of length n
-
-        Note: only support torch.LongTensors
-    """
     concatenated_u = paddle.concat((matches_one[0], matches_two[0]))
     concatenated_v = paddle.concat((matches_one[1], matches_two[1]))
     return concatenated_u, concatenated_v

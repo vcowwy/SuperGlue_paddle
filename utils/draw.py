@@ -12,7 +12,6 @@ import numpy as np
 from tqdm import tqdm
 from pathlib import Path
 
-#from tensorboardX import SummaryWriter
 from visualdl import LogWriter
 
 
@@ -54,21 +53,6 @@ def img_overlap(img_r, img_g, img_gray):
 
 
 def draw_keypoints(img, corners, color=(0, 255, 0), radius=3, s=3):
-    """
-
-    :param img:
-        image:
-        numpy [H, W]
-    :param corners:
-        Points
-        numpy [N, 2]
-    :param color:
-    :param radius:
-    :param s:
-    :return:
-        overlaying image
-        numpy [H, W]
-    """
     img = np.repeat(cv2.resize(img, None, fx=s, fy=s)[..., np.newaxis], 3, -1)
     for c in np.stack(corners).T:
         cv2.circle(img, tuple((s * c[:2]).astype(int)), radius, color, thickness=-1)
@@ -76,19 +60,6 @@ def draw_keypoints(img, corners, color=(0, 255, 0), radius=3, s=3):
 
 
 def draw_matches(rgb1, rgb2, match_pairs, lw=0.5, color='g', if_fig=True, filename='matches.png', show=False):
-    """
-
-    :param rgb1:
-        image1
-        numpy (H, W)
-    :param rgb2:
-        image2
-        numpy (H, W)
-    :param match_pairs:
-        numpy (keypoiny1 x, keypoint1 y, keypoint2 x, keypoint 2 y)
-    :return:
-        None
-    """
     from matplotlib import pyplot as plt
 
     h1, w1 = rgb1.shape[:2]

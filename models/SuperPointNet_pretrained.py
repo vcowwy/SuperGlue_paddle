@@ -16,7 +16,6 @@ def upconv(in_planes, out_planes):
 
 
 class SuperPointNet(paddle.nn.Layer):
-    """ Pytorch definition of SuperPoint Network. """
 
     def __init__(self):
         super(SuperPointNet, self).__init__()
@@ -49,14 +48,6 @@ class SuperPointNet(paddle.nn.Layer):
             padding=0)
 
     def forward(self, x):
-        """ Forward pass that jointly computes unprocessed point and descriptor
-    tensors.
-    Input
-      x: Image pytorch tensor shaped N x 1 x H x W.
-    Output
-      semi: Output point pytorch tensor shaped N x 65 x H/8 x W/8.
-      desc: Output descriptor pytorch tensor shaped N x 256 x H/8 x W/8.
-    """
         x = self.relu(self.conv1a(x))
         x = self.relu(self.conv1b(x))
         x = self.pool(x)
@@ -73,7 +64,7 @@ class SuperPointNet(paddle.nn.Layer):
         cDa = self.relu(self.convDa(x))
         desc = self.convDb(cDa)
         dn = paddle.norm(desc, p=2, axis=1) # Compute the norm.
-        desc = desc.div(paddle.unsqueeze(dn, 1))
+        desc = paddle.divide(desc, paddle.unsqueeze(dn, 1))
         return semi, desc
 
 

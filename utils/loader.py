@@ -8,8 +8,6 @@ import numpy as np
 
 import paddle
 import paddle.optimizer
-from paddle.io import DataLoader
-from x2paddle import torch2paddle
 
 from utils.utils import tensor2array
 from utils.utils import save_checkpoint
@@ -19,11 +17,6 @@ from utils.t2p import IntTensor
 
 
 def get_save_path(output_dir):
-    """
-    This func
-    :param output_dir:
-    :return:
-    """
     save_path = Path(output_dir)
     save_path = save_path / 'checkpoints'
     logging.info('=> will save everything to {}'.format(save_path))
@@ -32,28 +25,21 @@ def get_save_path(output_dir):
 
 
 def worker_init_fn(worker_id):
-    """The function is designed for pytorch multi-process dataloader.
-   Note that we use the pytorch random generator to generate a base_seed.
-   Please try to be consistent.
-
-   References:
-       https://pytorch.org/docs/stable/notes/faq.html#dataloader-workers-random-seed
-
-   """
-    base_seed = IntTensor(1).random_().item()
+    base_seed = paddle.to_tensor(data=1, dtype=paddle.int8).random_().item()
     np.random.seed(base_seed + worker_id)
 
 
 def dataLoader(config, dataset='syn', warp_input=False, train=True, val=True):
     import paddle.vision.transforms as transforms
+
     training_params = config.get('training', {})
     workers_train = training_params.get('workers_train', 1)
     workers_val = training_params.get('workers_val', 1)
 
     logging.info(f'workers_train: {workers_train}, workers_val: {workers_val}')
     data_transforms = {
-        'train': transforms.Compose([torch2paddle.ToTensor()]),
-        'val': transforms.Compose([torch2paddle.ToTensor()])
+        'train': transforms.Compose([transforms.ToTensor(), ]),
+        'val': transforms.Compose([transforms.ToTensor(), ])
     }
 
     Dataset = get_module('datasets', dataset)
@@ -64,7 +50,7 @@ def dataLoader(config, dataset='syn', warp_input=False, train=True, val=True):
         task='train',
         **config['data'])
 
-    train_loader = DataLoader(
+    train_loader = paddle.io.DataLoader(
         train_set,
         batch_size=config['model']['batch_size'],
         shuffle=True,
@@ -74,7 +60,7 @@ def dataLoader(config, dataset='syn', warp_input=False, train=True, val=True):
         transform=data_transforms['train'],
         task='val', **
         config['data'])
-    val_loader = DataLoader(
+    val_loader = paddle.io.DataLoader(
         val_set,
         batch_size=config['model']['eval_batch_size'],
         shuffle=True,
@@ -92,12 +78,12 @@ def dataLoader_test(config, dataset='syn', warp_input=False, export_task='train'
     workers_test = training_params.get('workers_test', 1)
     logging.info(f'workers_test: {workers_test}')
 
-    data_transforms = {'test': transforms.Compose([torch2paddle.ToTensor()])}
+    data_transforms = {'test': transforms.Compose([transforms.ToTensor(), ])}
     test_loader = None
     if dataset == 'syn':
-        #from datasets.SyntheticDataset_gaussian import SyntheticDataset_gaussian
-        from datasets.SyntheticDataset import SyntheticDataset
-        test_set = SyntheticDataset(transform=data_transforms['test'],
+        from datasets.SyntheticDataset_gaussian import SyntheticDataset_gaussian
+        #from datasets.SyntheticDataset import SyntheticDataset
+        test_set = SyntheticDataset_gaussian(transform=data_transforms['test'],
                                     train=False,
                                     warp_input=warp_input,
                                     getPts=True, seed=1,
@@ -110,16 +96,16 @@ def dataLoader_test(config, dataset='syn', warp_input=False, export_task='train'
             transform=data_transforms['test'],
             **config['data'])
 
-        test_loader = DataLoader(test_set,
-                                 batch_size=1,
-                                 shuffle=False,
-                                 num_workers=workers_test,
-                                 worker_init_fn=worker_init_fn)
+        test_loader = paddle.io.DataLoader(test_set,
+                                           batch_size=1,
+                                           shuffle=False,
+                                           num_workers=workers_test,
+                                           worker_init_fn=None)
     else:
         logging.info(f'load dataset from : {dataset}')
         Dataset = get_module('datasets', dataset)
         test_set = Dataset(export=True, task=export_task, **config['data'])
-        test_loader = DataLoader(
+        test_loader = paddle.io.DataLoader(
             test_set,
             batch_size=1,
             shuffle=False,
@@ -157,11 +143,11 @@ def pretrainedLoader(net, optimizer, epoch, path, mode='full', full_path=False):
         checkpoint = load_checkpoint(path)
 
     if mode == 'full':
-        net.load_state_dict(checkpoint['model_state_dict'])
-        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        net.load_dict(checkpoint['model_state_dict'])
+        optimizer.load_dict(checkpoint['optimizer_state_dict'])
         epoch = checkpoint['n_iter']
     else:
-        net.load_state_dict(checkpoint)
+        net.load_dict(checkpoint)
     return net, optimizer, epoch
 
 

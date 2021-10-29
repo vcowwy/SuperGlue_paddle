@@ -34,22 +34,14 @@ def img_overlap(img_r, img_g, img_gray):
 
 
 class Train_model_heatmap(Train_model_frontend):
-    """ Wrapper around pytorch net to help with pre and post image processing. """
-    """
-    * SuperPointFrontend_torch:
-    ** note: the input, output is different from that of SuperPointFrontend
-    heatmap: torch (batch_size, H, W, 1)
-    dense_desc: torch (batch_size, H, W, 256)
-    pts: [batch_size, np (N, 3)]
-    desc: [batch_size, np(256, N)]
-    """
+
     default_config = {'train_iter': 170000,
                       'save_interval': 2000,
                       'tensorboard_interval': 200,
                       'model': {'subpixel': {'enable': False}},
                       'data': {'gaussian_label': {'enable': False}}}
 
-    def __init__(self, config, save_path=Path('.'), device='cpu', verbose=False):
+    def __init__(self, config, save_path=Path('.'), device='gpu', verbose=False):
         print('Load Train_model_heatmap!!')
 
         self.config = self.default_config
@@ -86,20 +78,7 @@ class Train_model_heatmap(Train_model_frontend):
         pass
 
     def detector_loss(self, input, target, mask=None, loss_type='softmax'):
-        """
-        # apply loss on detectors, default is softmax
-        :param input: prediction
-            tensor [batch_size, 65, Hc, Wc]
-        :param target: constructed from labels
-            tensor [batch_size, 65, Hc, Wc]
-        :param mask: valid region in an image
-            tensor [batch_size, 1, Hc, Wc]
-        :param loss_type:
-            str (l2 or softmax)
-            softmax is used in original paper
-        :return: normalized loss
-            tensor
-        """
+
         if loss_type == 'l2':
             loss_func = nn.MSELoss(reduction="mean")
             loss = loss_func(input, target)
@@ -111,13 +90,7 @@ class Train_model_heatmap(Train_model_frontend):
         return loss
 
     def train_val_sample(self, sample, n_iter=0, train=False):
-        """
-        # key function
-        :param sample:
-        :param n_iter:
-        :param train:
-        :return:
-        """
+
         to_floatTensor = lambda x: paddle.to_tensor(x)
 
         task = 'train' if train else 'val'
@@ -148,17 +121,17 @@ class Train_model_heatmap(Train_model_frontend):
         self.optimizer.zero_grad()
 
         if train:
-            outs = self.net(img.to(self.device))
+            outs = self.net(img
             semi, coarse_desc = outs['semi'], outs['desc']
             if if_warp:
-                outs_warp = self.net(img_warp.to(self.device))
+                outs_warp = self.net(img_warp)
                 semi_warp, coarse_desc_warp = outs_warp['semi'], outs_warp['desc']
         else:
             with paddle.no_grad():
-                outs = self.net(img.to(self.device))
+                outs = self.net(img)
                 semi, coarse_desc = outs['semi'], outs['desc']
                 if if_warp:
-                    outs_warp = self.net(img_warp.to(self.device))
+                    outs_warp = self.net(img_warp)
                     semi_warp, coarse_desc_warp = outs_warp['semi'], outs_warp['desc']
                 pass
 
@@ -179,33 +152,33 @@ class Train_model_heatmap(Train_model_frontend):
         elif det_loss_type == 'softmax':
             add_dustbin = True
 
-        labels_3D = labels2Dto3D(labels_2D.to(self.device),
+        labels_3D = paddle.to_tensor(labels2Dto3D(labels_2D,
                                  cell_size=self.cell_size,
-                                 add_dustbin=add_dustbin).float()
+                                 add_dustbin=add_dustbin), dtype=paddle.float32)
         mask_3D_flattened = self.getMasks(mask_2D,
                                           self.cell_size,
                                           device=self.device)
 
         loss_det = self.detector_loss(input=outs['semi'],
-                                      target=labels_3D.to(self.device),
+                                      target=labels_3D,
                                       mask=mask_3D_flattened,
                                       loss_type=det_loss_type)
         if if_warp:
-            labels_3D = labels2Dto3D(
-                warped_labels.to(self.device),
+            labels_3D = paddle.to_tensor(labels2Dto3D(
+                warped_labels,
                 cell_size=self.cell_size,
-                add_dustbin=add_dustbin).float()
+                add_dustbin=add_dustbin), dtype=paddle.float32)
             mask_3D_flattened = self.getMasks(
                 mask_warp_2D,
                 self.cell_size,
                 device=self.device)
             loss_det_warp = self.detector_loss(
                 input=outs_warp['semi'],
-                target=labels_3D.to(self.device),
+                target=labels_3D,
                 mask=mask_3D_flattened,
                 loss_type=det_loss_type)
         else:
-            loss_det_warp = paddle.to_tensor([0]).float().to(self.device)
+            loss_det_warp = paddle.to_tensor([0], dtype=paddle.float32)
 
         mask_desc = mask_3D_flattened.unsqueeze(1)
 
@@ -219,7 +192,7 @@ class Train_model_heatmap(Train_model_frontend):
                                                                                   mask_valid=mask_desc,
                                                                                   device=self.device, **self.desc_params))
         else:
-            ze = paddle.to_tensor([0]).to(self.device)
+            ze = paddle.to_tensor([0])
             loss_desc, positive_dist, negative_dist = ze, ze, ze
 
         loss = loss_det + loss_det_warp
@@ -257,7 +230,7 @@ class Train_model_heatmap(Train_model_frontend):
                     name='warped_pred')
                 loss_res_warp = (outs_res_warp['loss'] ** 2).mean()
             else:
-                loss_res_warp = paddle.to_tensor([0]).to(self.device)
+                loss_res_warp = paddle.to_tensor([0])
             loss_res = loss_res_ori + loss_res_warp
 
             loss += loss_res
@@ -356,10 +329,7 @@ class Train_model_heatmap(Train_model_frontend):
         return loss.item()
 
     def heatmap_to_nms(self, images_dict, heatmap, name):
-        """
-        return: 
-            heatmap_nms_batch: np [batch, H, W]
-        """
+
         from utils.var_dim import toNumpy
         heatmap_np = toNumpy(heatmap)
 
@@ -404,12 +374,8 @@ class Train_model_heatmap(Train_model_frontend):
 
     @staticmethod
     def pred_soft_argmax(labels_2D, heatmap, labels_res, patch_size=5,
-        device='cuda'):
-        """
+        device='gpu'):
 
-        return:
-            dict {'loss': mean of difference btw pred and res}
-        """
         from utils.losses import norm_patches
 
         outs = {}
@@ -417,9 +383,9 @@ class Train_model_heatmap(Train_model_frontend):
         from utils.losses import extract_patches
         from utils.losses import soft_argmax_2d
 
-        label_idx = labels_2D[...].nonzero().long()
-        patches = extract_patches(label_idx.to(device),
-                                  heatmap.to(device),
+        label_idx = paddle.to_tensor(labels_2D[...].nonzero(), dtype=paddle.int64)
+        patches = extract_patches(label_idx,
+                                  heatmap,
                                   patch_size=patch_size)
 
         patches = norm_patches(patches)
@@ -433,13 +399,7 @@ class Train_model_heatmap(Train_model_frontend):
         dxdy = dxdy - patch_size // 2
 
         def ext_from_points(labels_res, points):
-            """
-            input:
-                labels_res: tensor [batch, channel, H, W]
-                points: tensor [N, 4(pos0(batch), pos1(0), pos2(H), pos3(W) )]
-            return:
-                tensor [N, channel]
-            """
+
             labels_res = labels_res.transpose(1, 2).transpose(2, 3).unsqueeze(1)
             points_res = labels_res[points[:, (0)], points[:, (1)], points[:, (2)], points[:, (3)], :]
             return points_res
@@ -449,19 +409,13 @@ class Train_model_heatmap(Train_model_frontend):
         outs['pred'] = dxdy
         outs['points_res'] = points_res
 
-        outs['loss'] = dxdy.to(device) - points_res.to(device)
+        outs['loss'] = dxdy - points_res
         outs['patches'] = patches
         return outs
 
     @staticmethod
     def flatten_64to1(semi, cell_size=8):
-        """
-        input: 
-            semi: tensor[batch, cell_size*cell_size, Hc, Wc]
-            (Hc = H/8)
-        outpus:
-            heatmap: tensor[batch, 1, H, W]
-        """
+
         from utils.d2s import DepthToSpace
 
         depth2space = DepthToSpace(cell_size)
@@ -470,10 +424,7 @@ class Train_model_heatmap(Train_model_frontend):
 
     @staticmethod
     def heatmap_nms(heatmap, nms_dist=4, conf_thresh=0.015):
-        """
-        input:
-            heatmap: np [(1), H, W]
-        """
+
         from utils.utils import getPtsFromHeatmap
 
         heatmap = heatmap.squeeze()
@@ -488,13 +439,11 @@ if __name__ == '__main__':
     filename = 'configs/superpoint_coco_train_heatmap.yaml'
     import yaml
 
-    device = 'cuda' if paddle.is_compiled_with_cuda() else 'cpu'
-    device = device.replace('cuda', 'gpu')
-    device = paddle.set_device(device)
+    device = paddle.device.set_device('gpu')
 
     paddle.set_default_dtype('float32')
     with open(filename, 'r') as f:
-        config = yaml.load(f)
+        config = yaml.load(f, Loader=yaml.FullLoader)
 
     from utils.loader import dataLoader as dataLoader
     task = config['data']['dataset']

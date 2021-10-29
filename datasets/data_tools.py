@@ -1,10 +1,10 @@
-from x2paddle import torch2paddle
 import paddle
-quan = lambda x: x.round().long()
+
+quan = lambda x: paddle.to_tensor(x.round(), dtype=paddle.int64)
 
 
 def extrapolate_points(pnts):
-    pnts_int = paddle.to_tensor(pnts.long(), dtype=paddle.float32)
+    pnts_int = paddle.to_tensor(paddle.to_tensor(pnts, dtype=paddle.int64), dtype=paddle.float32)
     pnts_x, pnts_y = pnts_int[:, 0], pnts_int[:, 1]
     stack_1 = lambda x, y: paddle.stack((x, y), axis=1)
     pnts_ext = paddle.concat((pnts_int, stack_1(pnts_x, pnts_y + 1),
@@ -37,10 +37,10 @@ def warpLabels(pnts, H, W, homography, bilinear=False):
     from utils.utils import homography_scaling_torch as homography_scaling
     from utils.utils import filter_points
     from utils.utils import warp_points
-    if isinstance(pnts, torch2paddle.create_tensor):
-        pnts = pnts.long()
+    if isinstance(pnts, paddle.Tensor):
+        pnts = paddle.to_tensor(pnts, dtype=paddle.int64)
     else:
-        pnts = paddle.to_tensor(pnts).long()
+        pnts = paddle.to_tensor(pnts, dtype=paddle.int64)
     warped_pnts = warp_points(paddle.stack((pnts[:, (0)], pnts[:, (1)]),
         axis=1), homography_scaling(homography, H, W))
     outs = {}

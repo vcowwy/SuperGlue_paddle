@@ -14,34 +14,6 @@ def sample_homography_np(shape, shift=0, perspective=True, scaling=True,
                          scaling_amplitude=0.1, perspective_amplitude_x=0.1,
                          perspective_amplitude_y=0.1, patch_ratio=0.5, max_angle=pi / 2,
                          allow_artifacts=False, translation_overflow=0.0):
-    """Sample a random valid homography.
-
-    Computes the homography transformation between a random patch in the original image
-    and a warped projection with the same image size.
-    As in `tf.contrib.image.transform`, it maps the output point (warped patch) to a
-    transformed input point (original patch).
-    The original patch, which is initialized with a simple half-size centered crop, is
-    iteratively projected, scaled, rotated and translated.
-
-    Arguments:
-        shape: A rank-2 `Tensor` specifying the height and width of the original image.
-        perspective: A boolean that enables the perspective and affine transformations.
-        scaling: A boolean that enables the random scaling of the patch.
-        rotation: A boolean that enables the random rotation of the patch.
-        translation: A boolean that enables the random translation of the patch.
-        n_scales: The number of tentative scales that are sampled when scaling.
-        n_angles: The number of tentatives angles that are sampled when rotating.
-        scaling_amplitude: Controls the amount of scale.
-        perspective_amplitude_x: Controls the perspective effect in x direction.
-        perspective_amplitude_y: Controls the perspective effect in y direction.
-        patch_ratio: Controls the size of the patches used to create the homography.
-        max_angle: Maximum angle used in rotations.
-        allow_artifacts: A boolean that enables artifacts when applying the homography.
-        translation_overflow: Amount of border artifacts caused by translation.
-
-    Returns:
-        A `Tensor` of shape `[1, 8]` corresponding to the flattened homography transform.
-    """
 
     pts1 = np.stack([[0.0, 0.0], [0.0, 1.0], [1.0, 1.0], [1.0, 0.0]], axis=0)
 
@@ -121,7 +93,7 @@ def sample_homography_np(shape, shift=0, perspective=True, scaling=True,
     homography = cv2.getPerspectiveTransform(np.float32(pts1 + shift), np.float32(pts2 + shift))
     return homography
 
-
+"""
 def sample_homography(shape, perspective=True, scaling=True, rotation=True,
                       translation=True, n_scales=5, n_angles=25, scaling_amplitude=0.1,
                       perspective_amplitude_x=0.1, perspective_amplitude_y=0.1,
@@ -129,34 +101,6 @@ def sample_homography(shape, perspective=True, scaling=True, rotation=True,
 
     import tensorflow as tf
     from tensorflow.contrib.image import transform as H_transform
-    """Sample a random valid homography.
-
-    Computes the homography transformation between a random patch in the original image
-    and a warped projection with the same image size.
-    As in `tf.contrib.image.transform`, it maps the output point (warped patch) to a
-    transformed input point (original patch).
-    The original patch, which is initialized with a simple half-size centered crop, is
-    iteratively projected, scaled, rotated and translated.
-
-    Arguments:
-        shape: A rank-2 `Tensor` specifying the height and width of the original image.
-        perspective: A boolean that enables the perspective and affine transformations.
-        scaling: A boolean that enables the random scaling of the patch.
-        rotation: A boolean that enables the random rotation of the patch.
-        translation: A boolean that enables the random translation of the patch.
-        n_scales: The number of tentative scales that are sampled when scaling.
-        n_angles: The number of tentatives angles that are sampled when rotating.
-        scaling_amplitude: Controls the amount of scale.
-        perspective_amplitude_x: Controls the perspective effect in x direction.
-        perspective_amplitude_y: Controls the perspective effect in y direction.
-        patch_ratio: Controls the size of the patches used to create the homography.
-        max_angle: Maximum angle used in rotations.
-        allow_artifacts: A boolean that enables artifacts when applying the homography.
-        translation_overflow: Amount of border artifacts caused by translation.
-
-    Returns:
-        A `Tensor` of shape `[1, 8]` corresponding to the flattened homography transform.
-    """
 
     pts1 = tf.stack([[0.0, 0.0], [0.0, 1.0], [1.0, 1.0], [1.0, 0.0]], axis=0)
     margin = (1 - patch_ratio) / 2
@@ -233,7 +177,7 @@ def sample_homography(shape, perspective=True, scaling=True, rotation=True,
     homography = np.concatenate((homography, np.array([[1]])), axis=1)
     homography = homography.reshape(3, 3)
     return homography
-
+"""
 
 import paddle
 
@@ -242,7 +186,7 @@ def scale_homography_torch(H, shape, shift=(-1, -1), dtype=paddle.float32):
     height, width = shape[0], shape[1]
     trans = paddle.to_tensor([[2.0 / width, 0.0, shift[0]], [0.0, 2.0 /height, shift[1]], [0.0, 0.0, 1.0]], dtype=dtype)
 
-    H_tf = paddle.inverse(trans) @ H @ trans
+    H_tf = paddle.matmul(paddle.matmul(paddle.inverse(trans), H), trans)
     return H_tf
 
 

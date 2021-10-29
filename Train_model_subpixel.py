@@ -30,7 +30,7 @@ class Train_model_subpixel(Train_model_frontend):
                       'tensorboard_interval': 200,
                       'model': {'subpixel': {'enable': False}}}
 
-    def __init__(self, config, save_path=Path('.'), device='cpu', verbose=False):
+    def __init__(self, config, save_path=Path('.'), device='gpu', verbose=False):
         print('using: Train_model_subpixel')
         self.config = self.default_config
         self.config = dict_update(self.config, config)
@@ -98,14 +98,14 @@ class Train_model_subpixel(Train_model_frontend):
         from utils.losses import extract_patches
 
         patch_size = self.config['model']['params']['patch_size']
-        patches = extract_patches(label_idx.to(self.device),
-                                  img.to(self.device),
+        patches = extract_patches(label_idx
+                                  img,
                                   patch_size=patch_size)
 
         patch_channels = self.config['model']['params'].get('subpixel_channel', 1)
         if patch_channels == 2:
-            patch_heat = extract_patches(label_idx.to(self.device),
-                                         img.to(self.device),
+            patch_heat = extract_patches(label_idx,
+                                         img,
                                          patch_size=patch_size)
 
         def label_to_points(labels_res, points):
@@ -117,14 +117,14 @@ class Train_model_subpixel(Train_model_frontend):
 
         num_patches_max = 500
 
-        pred_res = self.net(patches[:num_patches_max, ...].to(self.device))
+        pred_res = self.net(patches[:num_patches_max, ...])
 
         def get_loss(points_res, pred_res):
             loss = points_res - pred_res
             loss = paddle.norm(loss, p=2, axis=-1).mean()
             return loss
 
-        loss = get_loss(points_res[:num_patches_max, ...].to(self.device),
+        loss = get_loss(points_res[:num_patches_max, ...],
                         pred_res)
         self.loss = loss
 
@@ -167,13 +167,12 @@ class Train_model_subpixel(Train_model_frontend):
 if __name__ == '__main__':
     filename = 'configs/magicpoint_shapes_subpix.yaml'
     import yaml
-    device = 'cuda' if paddle.is_compiled_with_cuda() else 'cpu'
 
-    device = device.replace('cuda', 'gpu')
-    device = paddle.set_device(device)
+    device = paddle.device.set_device('gpu')
+
     paddle.set_default_dtype('float32')
     with open(filename, 'r') as f:
-        config = yaml.load(f)
+        config = yaml.load(f, Loader=yaml.FullLoader)
 
     from utils.loader import dataLoader as dataLoader
 
@@ -186,7 +185,6 @@ if __name__ == '__main__':
     train_agent = Train_model_subpixel(config, device=device)
     train_agent.print()
 
-    #from tensorboardX import SummaryWriter
     from visualdl import LogWriter
 
     writer = LogWriter()

@@ -35,14 +35,6 @@ class SuperPointNet_gauss2(paddle.nn.Layer):
         self.output = None
 
     def forward(self, x):
-        """ Forward pass that jointly computes unprocessed point and descriptor
-        tensors.
-        Input
-          x: Image pytorch tensor shaped N x 1 x patch_size x patch_size.
-        Output
-          semi: Output point pytorch tensor shaped N x 65 x H/8 x W/8.
-          desc: Output descriptor pytorch tensor shaped N x 256 x H/8 x W/8.
-        """
         x1 = self.inc(x)
         x2 = self.down1(x1)
         x3 = self.down2(x2)
@@ -58,14 +50,6 @@ class SuperPointNet_gauss2(paddle.nn.Layer):
         return output
 
     def process_output(self, sp_processer):
-        """
-        input:
-          N: number of points
-        return: -- type: tensorFloat
-          pts: tensor [batch, N, 2] (no grad)  (x, y)
-          pts_offset: tensor [batch, N, 2] (grad) (x, y)
-          pts_desc: tensor [batch, N, 256] (grad)
-        """
         from utils.utils import flattenDetection
         output = self.output
         semi = output['semi']
@@ -91,15 +75,14 @@ def get_matches(deses_SP):
 
 
 def main():
-    device = 'cuda' if paddle.is_compiled_with_cuda() else 'cpu'
-    device = device.replace('cuda', 'gpu')
-    device = paddle.set_device(device)
+
+    device = paddle.device.set_device('gpu')
     model = SuperPointNet_gauss2()
-    model = model.to(device)
+    model = model
     from paddle import summary
     summary(model, input_size=(1, 240, 320))
     image = paddle.zeros((2, 1, 120, 160)).requires_grad_(False)
-    outs = model(image.to(device))
+    outs = model(image)
     print('outs: ', list(outs))
     from utils.print_tool import print_dict_attr
     print_dict_attr(outs, 'shape')
@@ -116,14 +99,14 @@ def main():
     start = time.time()
     print('Start timer!')
     for i in tqdm(range(iter_max)):
-        outs = model(image.to(device))
+        outs = model(image)
     end = time.time()
     print('forward only: ', iter_max / (end - start), ' iter/s')
     start = time.time()
     print('Start timer!')
     xs_SP, deses_SP, reses_SP = [], [], []
     for i in tqdm(range(iter_max)):
-        outs = model(image.to(device))
+        outs = model(image)
         outs = model.process_output(sp_processer)
         xs_SP.append(outs['pts_int'].squeeze())
         deses_SP.append(outs['pts_desc'].squeeze())

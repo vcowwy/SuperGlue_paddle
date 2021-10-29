@@ -1,4 +1,3 @@
-import numpy as numpy
 import numpy as np
 import math
 from numpy.linalg import inv
@@ -93,7 +92,7 @@ def random_sample_from_masked_image_torch(img_mask, num_samples):
     """
     image_height, image_width = img_mask.shape
     if isinstance(img_mask, np.ndarray):
-        img_mask_torch = paddle.to_tensor(img_mask).float()
+        img_mask_torch = paddle.to_tensor(img_mask, dtype=paddle.float32)
     else:
         img_mask_torch = img_mask
     mask = img_mask_torch.view(image_width * image_height, 1).squeeze(1)
@@ -101,7 +100,7 @@ def random_sample_from_masked_image_torch(img_mask, num_samples):
     if len(mask_indices_flat) == 0:
         return None, None
     rand_numbers = paddle.rand(num_samples) * len(mask_indices_flat)
-    rand_indices = paddle.floor(rand_numbers).long()
+    rand_indices = paddle.to_tensor(paddle.floor(rand_numbers), dtype=paddle.int64)
     uv_vec_flattened = paddle.index_select(mask_indices_flat, 0, rand_indices).squeeze(1)
     uv_vec = utils.flattened_pixel_locations_to_u_v(uv_vec_flattened,
         image_width)
@@ -109,35 +108,12 @@ def random_sample_from_masked_image_torch(img_mask, num_samples):
 
 
 def pinhole_projection_image_to_world(uv, z, K):
-    """
-    Takes a (u,v) pixel location to it's 3D location in camera frame.
-    See https://docs.opencv.org/2.4/modules/calib3d/doc/camera_calibration_and_3d_reconstruction.html for a detailed explanation.
-
-    :param uv: pixel location in image
-    :type uv:
-    :param z: depth, in camera frame
-    :type z: float
-    :param K: 3 x 3 camera intrinsics matrix
-    :type K: numpy.ndarray
-    :return: (x,y,z) in camera frame
-    :rtype: numpy.array size (3,)
-    """
     u_v_1 = np.array([uv[0], uv[1], 1])
     pos = z * np.matmul(inv(K), u_v_1)
     return pos
 
 
 def pinhole_projection_world_to_image(world_pos, K, camera_to_world=None):
-    """
-    Projects from world position to camera coordinates
-    See https://docs.opencv.org/2.4/modules/calib3d/doc/camera_calibration_and_3d_reconstruction.html
-    :param world_pos:
-    :type world_pos:
-    :param K:
-    :type K:
-    :return:
-    :rtype:
-    """
     world_pos_vec = np.append(world_pos, 1)
     if camera_to_world is not None:
         world_pos_vec = np.dot(np.linalg.inv(camera_to_world), world_pos_vec)
@@ -148,58 +124,12 @@ def pinhole_projection_world_to_image(world_pos, K, camera_to_world=None):
 
 
 def where(cond, x_1, x_2):
-    """
-    We follow the torch.where implemented in 0.4.
-    See http://pytorch.org/docs/master/torch.html?highlight=where#torch.where
-
-    For more discussion see https://discuss.pytorch.org/t/how-can-i-do-the-operation-the-same-as-np-where/1329/8
-
-
-    Return a tensor of elements selected from either x_1 or x_2, depending on condition.
-    :param cond: cond should be tensor with entries [0,1]
-    :type cond:
-    :param x_1: torch.Tensor
-    :type x_1:
-    :param x_2: torch.Tensor
-    :type x_2:
-    :return:
-    :rtype:
-    """
     cond = paddle.to_tensor(cond, dtype=paddle.float32)
     return cond * x_1 + (1 - cond) * x_2
 
 
 def create_non_correspondences(uv_b_matches, img_b_shape,
     num_non_matches_per_match=100, img_b_mask=None):
-    """
-    Takes in pixel matches (uv_b_matches) that correspond to matches in another image, and generates non-matches by just sampling in image space.
-
-    Optionally, the non-matches can be sampled from a mask for image b.
-
-    Returns non-matches as pixel positions in image b.
-
-    Please see 'coordinate_conventions.md' documentation for an explanation of pixel coordinate conventions.
-
-    ## Note that arg uv_b_matches are the outputs of batch_find_pixel_correspondences()
-
-    :param uv_b_matches: tuple of torch.FloatTensors, where each FloatTensor is length n, i.e.:
-        (torch.FloatTensor, torch.FloatTensor)
-
-    :param img_b_shape: tuple of (H,W) which is the shape of the image
-
-    (optional)
-    :param num_non_matches_per_match: int
-
-    (optional)
-    :param img_b_mask: torch.FloatTensor (can be cuda or not)
-        - masked image, we will select from the non-zero entries
-        - shape is H x W
-     
-    :return: tuple of torch.FloatTensors, i.e. (torch.FloatTensor, torch.FloatTensor).
-        - The first element of the tuple is all "u" pixel positions, and the right element of the tuple is all "v" positions
-        - Each torch.FloatTensor is of shape torch.Shape([num_matches, non_matches_per_match])
-        - This shape makes it so that each row of the non-matches corresponds to the row for the match in uv_a
-    """
     image_width = img_b_shape[1]
     image_height = img_b_shape[0]
     if uv_b_matches == None:
@@ -219,7 +149,7 @@ def create_non_correspondences(uv_b_matches, img_b_shape,
             num_samples = num_matches * num_non_matches_per_match
             rand_numbers_b = paddle.rand(num_samples) * len(
                 mask_b_indices_flat)
-            rand_indices_b = paddle.floor(rand_numbers_b).long()
+            rand_indices_b = paddle.to_tensor(paddle.floor(rand_numbers_b), dtype=paddle.int64)
             randomized_mask_b_indices_flat = paddle.index_select(mask_b_indices_flat, 0, rand_indices_b).squeeze(1)
             uv_b_non_matches = (randomized_mask_b_indices_flat %
                 image_width, randomized_mask_b_indices_flat / image_width)
@@ -247,7 +177,7 @@ def create_non_correspondences(uv_b_matches, img_b_shape,
     need_to_be_perturbed = where(diffs_1_flattened < threshold, ones,
         need_to_be_perturbed)
     minimal_perturb = num_pixels_too_close / 2
-    """minimal_perturb_vector = (torch.rand(len(need_to_be_perturbed))*2).floor()*(minimal_perturb*2)-minimal_perturb"""
+    minimal_perturb_vector = (paddle.rand(len(need_to_be_perturbed))*2).floor()*(minimal_perturb*2)-minimal_perturb
     std_dev = 10
     random_vector = paddle.randn(len(need_to_be_perturbed)
         ) * std_dev + minimal_perturb_vector
@@ -285,44 +215,8 @@ def create_non_correspondences(uv_b_matches, img_b_shape,
 
 
 def batch_find_pixel_correspondences(img_a_depth, img_a_pose, img_b_depth,
-    img_b_pose, uv_a=None, num_attempts=20, device='CPU', img_a_mask=None,
+    img_b_pose, uv_a=None, num_attempts=20, device='gpu', img_a_mask=None,
     K=None):
-    """
-    Computes pixel correspondences in batch
-
-    :param img_a_depth: depth image for image a
-    :type  img_a_depth: numpy 2d array (H x W) encoded as a uint16
-    --
-    :param img_a_pose:  pose for image a, in right-down-forward optical frame
-    :type  img_a_pose:  numpy 2d array, 4 x 4 (homogeneous transform)
-    --
-    :param img_b_depth: depth image for image b
-    :type  img_b_depth: numpy 2d array (H x W) encoded as a uint16
-    -- 
-    :param img_b_pose:  pose for image a, in right-down-forward optical frame
-    :type  img_b_pose:  numpy 2d array, 4 x 4 (homogeneous transform)
-    -- 
-    :param uv_a:        optional arg, a tuple of (u,v) pixel positions for which to find matches
-    :type  uv_a:        each element of tuple is either an int, or a list-like (castable to torch.LongTensor)
-    --
-    :param num_attempts: if random sampling, how many pixels will be _attempted_ to find matches for.  Note that
-                            this is not the same as asking for a specific number of matches, since many attempted matches
-                            will either be occluded or outside of field-of-view. 
-    :type  num_attempts: int
-    --
-    :param device:      either 'CPU' or 'CPU'
-    :type  device:      string
-    --
-    :param img_a_mask:  optional arg, an image where each nonzero pixel will be used as a mask
-    :type  img_a_mask:  ndarray, of shape (H, W)
-    --
-    :param K:           optional arg, an image where each nonzero pixel will be used as a mask
-    :type  K:           ndarray, of shape (H, W)
-    --
-    :return:            "Tuple of tuples", i.e. pixel position tuples for image a and image b (uv_a, uv_b). 
-                        Each of these is a tuple of pixel positions
-    :rtype:             Each of uv_a is a tuple of torch.FloatTensors
-    """
     assert img_a_depth.shape == img_b_depth.shape
     image_width = img_a_depth.shape[1]
     image_height = img_b_depth.shape[0]

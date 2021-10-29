@@ -26,7 +26,7 @@ from models.model_wrap import SuperPointFrontend_torch, PointTracker
 from settings import EXPER_PATH
 
 
-def combine_heatmap(heatmap, inv_homographies, mask_2D, device='cpu'):
+def combine_heatmap(heatmap, inv_homographies, mask_2D, device='gpu'):
     heatmap = heatmap * mask_2D
 
     heatmap = inv_warp_image_batch(heatmap, inv_homographies[0, :, :, :],
@@ -41,25 +41,11 @@ def combine_heatmap(heatmap, inv_homographies, mask_2D, device='cpu'):
 
 
 def export_descriptor(config, output_dir, args):
-    """
-    # input 2 images, output keypoints and correspondence
-    save prediction:
-        pred:
-            'image': np(320,240)
-            'prob' (keypoints): np (N1, 2)
-            'desc': np (N2, 256)
-            'warped_image': np(320,240)
-            'warped_prob' (keypoints): np (N2, 2)
-            'warped_desc': np (N2, 256)
-            'homography': np (3,3)
-            'matches': np [N3, 4]
-    """
+
     from utils.loader import get_save_path
     from utils.var_dim import squeezeToNumpy
 
-    device = 'cuda:0' if paddle.is_compiled_with_cuda() else 'cpu'
-    device = device.replace('cuda', 'gpu')
-    device = paddle.set_device(device)
+    device = paddle.device.set_device('gpu')
     logging.info('train on device: %s', device)
     with open(os.path.join(output_dir, 'config.yml'), 'w') as f:
         yaml.dump(config, f, default_flow_style=False)
@@ -88,15 +74,13 @@ def export_descriptor(config, output_dir, args):
     tracker = PointTracker(max_length=2, nn_thresh=val_agent.nn_thresh)
 
     count = 0
+
     for i, sample in tqdm(enumerate(test_loader)):
         img_0, img_1 = sample['image'], sample['warped_image']
 
-        def get_pts_desc_from_agent(val_agent, img, device='cpu'):
-            """
-            pts: list [numpy (3, N)]
-            desc: list [numpy (256, N)]
-            """
-            heatmap_batch = val_agent.run(img.to(device))
+        def get_pts_desc_from_agent(val_agent, img, device='gpu'):
+
+            heatmap_batch = val_agent.run(img)
             pts = val_agent.heatmap_to_pts()
             if subpixel:
                 pts = val_agent.soft_argmax_points(pts, patch_size=patch_size)
@@ -147,23 +131,19 @@ def export_descriptor(config, output_dir, args):
 
 @paddle.no_grad()
 def export_detector_homoAdapt_gpu(config, output_dir, args):
-    """
-    input 1 images, output pseudo ground truth by homography adaptation.
-    Save labels:
-        pred:
-            'prob' (keypoints): np (N1, 3)
-    """
+
     from utils.utils import pltImshow
     from utils.utils import saveImg
     from utils.draw import draw_keypoints
 
     task = config['data']['dataset']
     export_task = config['data']['export_folder']
-    device = 'cuda:0' if paddle.is_compiled_with_cuda() else 'cpu'
+    device = 'gpu'
 
-    device = device.replace('cuda', 'gpu')
-    device = paddle.set_device(device)
+    paddle.device.set_device(device)
+
     logging.info('train on device: %s', device)
+
     with open(os.path.join(output_dir, 'config.yml'), 'w') as f:
         yaml.dump(config, f, default_flow_style=False)
     writer = LogWriter(getWriterPath(task=args.command,
@@ -229,10 +209,10 @@ def export_detector_homoAdapt_gpu(config, output_dir, args):
         mask_2D = mask_2D.transpose(0, 1)
 
         inv_homographies, homographies = sample['homographies'], sample['inv_homographies']
-        img, mask_2D, homographies, inv_homographies = img.to(device), \
-                                                       mask_2D.to(device), \
-                                                       homographies.to(device),\
-                                                       inv_homographies.to(device)
+        img, mask_2D, homographies, inv_homographies = img, \
+                                                       mask_2D, \
+                                                       homographies,\
+                                                       inv_homographies
 
         name = sample['name'][0]
         logging.info(f'name: {name}')
@@ -291,6 +271,8 @@ def export_detector_homoAdapt_gpu(config, output_dir, args):
 
 if __name__ == '__main__':
     paddle.set_default_dtype('float32')
+    device = paddle.device.set_device('gpu')
+
     logging.basicConfig(format='[%(asctime)s %(levelname)s] %(message)s',
                         datefmt='%m/%d/%Y %H:%M:%S', level=logging.INFO)
 
@@ -318,7 +300,7 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     with open(args.config, 'r') as f:
-        config = yaml.load(f)
+        config = yaml.load(f, Loader=yaml.FullLoader)
     print('check config!! ', config)
 
     output_dir = os.path.join(EXPER_PATH, args.exper_name)

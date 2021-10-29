@@ -8,7 +8,6 @@ from tqdm import tqdm
 
 import paddle
 import paddle.nn as nn
-from x2paddle import torch2paddle
 
 from utils.loader import dataLoader, modelLoader, pretrainedLoader
 from utils.tools import dict_update
@@ -19,12 +18,6 @@ from utils.utils import save_checkpoint
 
 
 def thd_img(img, thd=0.015):
-    """
-    thresholding the image.
-    :param img:
-    :param thd:
-    :return:
-    """
     img[img < thd] = 0
     img[img >= thd] = 1
     return img
@@ -44,29 +37,12 @@ def img_overlap(img_r, img_g, img_gray):
 
 
 class Train_model_frontend(object):
-    """
-    # This is the base class for training classes. Wrap pytorch net to help training process.
-    """
     default_config = {'train_iter': 170000,
                       'save_interval': 2000,
                       'tensorboard_interval': 200,
                       'model': {'subpixel': {'enable': False}}}
 
-    def __init__(self, config, save_path=Path('.'), device='cpu', verbose=False):
-        """
-        ## default dimension:
-            heatmap: torch (batch_size, H, W, 1)
-            dense_desc: torch (batch_size, H, W, 256)
-            pts: [batch_size, np (N, 3)]
-            desc: [batch_size, np(256, N)]
-        
-        :param config:
-            dense_loss, sparse_loss (default)
-            
-        :param save_path:
-        :param device:
-        :param verbose:
-        """
+    def __init__(self, config, save_path=Path('.'), device='gpu', verbose=False):
         print('Load Train_model_frontend!!')
         self.config = self.default_config
         self.config = dict_update(self.config, config)
@@ -114,10 +90,6 @@ class Train_model_frontend(object):
         pass
 
     def printImportantConfig(self):
-        """
-        # print important configs
-        :return:
-        """
         print('=' * 10, ' check!!! ', '=' * 10)
 
         print('learning_rate: ', self.config['model']['learning_rate'])
@@ -133,36 +105,21 @@ class Train_model_frontend(object):
         pass
 
     def dataParallel(self):
-        """
-        put network and optimizer to multiple gpus
-        :return:
-        """
-        print("=== Let's use", torch2paddle.device_count(), 'GPUs!')
-        self.net = paddle.DataParallel(self.net)
+        print("=== Let's use", paddle.get_device(), 'GPUs!')
+        #self.net = paddle.DataParallel(self.net)
         self.optimizer = self.adamOptim(self.net, lr=self.config['model']['learning_rate'])
         pass
 
     def adamOptim(self, net, lr):
-        """
-        initiate adam optimizer
-        :param net: network structure
-        :param lr: learning rate
-        :return:
-        """
         print('adam optimizer')
-        optimizer = paddle.optimizer.Adam(net.parameters(), learning_rate=lr, beta1=0.9, beta2=0.999)
+        optimizer = paddle.optimizer.Adam(parameters=net.parameters(), learning_rate=lr, beta1=0.9, beta2=0.999)
         return optimizer
 
     def loadModel(self):
-        """
-        load model from name and params
-        init or load optimizer
-        :return:
-        """
         model = self.config['model']['name']
         params = self.config['model']['params']
         print('model: ', model)
-        net = modelLoader(model=model, **params).to(self.device)
+        net = modelLoader(model=model, **params)
         logging.info('=> setting adam solver')
         optimizer = self.adamOptim(net, lr=self.config['model']['learning_rate'])
 
@@ -191,10 +148,6 @@ class Train_model_frontend(object):
 
     @property
     def writer(self):
-        """
-        # writer for tensorboard
-        :return:
-        """
         return self._writer
 
     @writer.setter
@@ -204,11 +157,7 @@ class Train_model_frontend(object):
 
     @property
     def train_loader(self):
-        """
-        loader for dataset, set from outside
-        :return:
-        """
-        print('get dataloader')
+        print('train get dataloader')
         return self._train_loader
 
     @train_loader.setter
@@ -218,22 +167,15 @@ class Train_model_frontend(object):
 
     @property
     def val_loader(self):
-        print('get dataloader')
+        print('val get dataloader')
         return self._val_loader
 
     @val_loader.setter
     def val_loader(self, loader):
-        print('set train loader')
+        print('set val loader')
         self._val_loader = loader
 
     def train(self, **options):
-        """
-        # outer loop for training
-        # control training and validation pace
-        # stop when reaching max iterations
-        :param options:
-        :return:
-        """
         logging.info('n_iter: %d', self.n_iter)
         logging.info('max_iter: %d', self.max_iter)
         running_losses = []
@@ -243,8 +185,7 @@ class Train_model_frontend(object):
             epoch += 1
             for i, sample_train in tqdm(enumerate(self.train_loader)):
 
-                loss_out = self.train_val_sample(sample_train, self.n_iter,
-                    True)
+                loss_out = self.train_val_sample(sample_train, self.n_iter, True)
                 self.n_iter += 1
                 running_losses.append(loss_out)
 
@@ -267,45 +208,20 @@ class Train_model_frontend(object):
                     break
         pass
 
-    def getLabels(self, labels_2D, cell_size, device='cpu'):
-        """
-        # transform 2D labels to 3D shape for training
-        :param labels_2D:
-        :param cell_size:
-        :param device:
-        :return:
-        """
+    def getLabels(self, labels_2D, cell_size, device='gpu'):
         labels3D_flattened = labels2Dto3D_flattened(
-            labels_2D.to(device), cell_size=cell_size)
+            labels_2D, cell_size=cell_size)
         labels3D_in_loss = labels3D_flattened
         return labels3D_in_loss
 
-    def getMasks(self, mask_2D, cell_size, device='cpu'):
-        """
-        # 2D mask is constructed into 3D (Hc, Wc) space for training
-        :param mask_2D:
-            tensor [batch, 1, H, W]
-        :param cell_size:
-            8 (default)
-        :param device:
-        :return:
-            flattened 3D mask for training
-        """
-        mask_3D = labels2Dto3D(
-            mask_2D.to(device), cell_size=cell_size, add_dustbin=False).float()
+    def getMasks(self, mask_2D, cell_size, device='gpu'):
+        mask_3D = paddle.to_tensor(labels2Dto3D(
+            mask_2D, cell_size=cell_size, add_dustbin=False), dtype=paddle.float32)
         mask_3D_flattened = paddle.prod(mask_3D, 1)
         return mask_3D_flattened
 
-    def get_loss(self, semi, labels3D_in_loss, mask_3D_flattened, device='cpu'):
-        """
-        ## deprecated: loss function
-        :param semi:
-        :param labels3D_in_loss:
-        :param mask_3D_flattened:
-        :param device:
-        :return:
-        """
-        loss_func = nn.CrossEntropyLoss().to(device)
+    def get_loss(self, semi, labels3D_in_loss, mask_3D_flattened, device='gpu'):
+        loss_func = nn.CrossEntropyLoss()
 
         loss = loss_func(semi, labels3D_in_loss)
         loss = (loss * mask_3D_flattened).sum()
@@ -313,20 +229,13 @@ class Train_model_frontend(object):
         return loss
 
     def train_val_sample(self, sample, n_iter=0, train=False):
-        """
-        # deprecated: default train_val_sample
-        :param sample:
-        :param n_iter:
-        :param train:
-        :return:
-        """
         task = 'train' if train else 'val'
         tb_interval = self.config['tensorboard_interval']
 
         losses = {}
-        img, labels_2D, mask_2D = sample['image'], \
-                                  sample['labels_2D'],\
-                                  sample['valid_mask']
+        img, labels_2D, mask_2D = paddle.to_tensor(sample[0]), \
+                                  paddle.to_tensor(sample[4]),\
+                                  paddle.to_tensor(sample[3])
 
         batch_size, H, W = img.shape[0], img.shape[2], img.shape[3]
         self.batch_size = batch_size
@@ -334,23 +243,23 @@ class Train_model_frontend(object):
         Hc = H // self.cell_size
         Wc = W // self.cell_size
 
-        img_warp, labels_warp_2D, mask_warp_2D = sample['warped_img'],\
-                                                 sample['warped_labels'],\
-                                                 sample['warped_valid_mask']
+        img_warp, labels_warp_2D, mask_warp_2D = paddle.to_tensor(sample[8]),\
+                                                 paddle.to_tensor(sample[9]),\
+                                                 paddle.to_tensor(sample[11])
 
-        mat_H, mat_H_inv = sample['homographies'], sample['inv_homographies']
+        mat_H, mat_H_inv = paddle.to_tensor(sample[12]), paddle.to_tensor(sample[13])
 
         self.optimizer.zero_grad()
 
         if train:
-            outs, outs_warp = self.net(img.to(self.device)), \
-                              self.net(img_warp.to(self.device), subpixel=self.subpixel)
+            outs, outs_warp = self.net(img), \
+                              self.net(img_warp, subpixel=self.subpixel)
             semi, coarse_desc = outs[0], outs[1]
             semi_warp, coarse_desc_warp = outs_warp[0], outs_warp[1]
         else:
             with paddle.no_grad():
-                outs, outs_warp = self.net(img.to(self.device)), \
-                                  self.net(img_warp.to(self.device), subpixel=self.subpixel)
+                outs, outs_warp = self.net(img), \
+                                  self.net(img_warp, subpixel=self.subpixel)
                 semi, coarse_desc = outs[0], outs[1]
                 semi_warp, coarse_desc_warp = outs_warp[0], outs_warp[1]
                 pass
@@ -385,22 +294,22 @@ class Train_model_frontend(object):
             dense_map = flattenDetection(semi_warp)
 
             concat_features = paddle.concat(
-                (img_warp.to(self.device), dense_map), axis=1)
+                (img_warp, dense_map), axis=1)
 
             pred_heatmap = outs_warp[2]
 
-            labels_warped_res = sample['warped_res']
+            labels_warped_res = paddle.to_tensor(sample[10])
 
-            subpix_loss = self.subpixel_loss_func(labels_warp_2D.to(self.device),
-                                                  labels_warped_res.to(self.device),
-                                                  pred_heatmap.to(self.device),
+            subpix_loss = self.subpixel_loss_func(labels_warp_2D,
+                                                  labels_warped_res,
+                                                  pred_heatmap,
                                                   patch_size=11)
             label_idx = labels_2D[...].nonzero()
 
             from utils.losses import extract_patches
             patch_size = 32
-            patches = extract_patches(label_idx.to(self.device),
-                                      img_warp.to(self.device),
+            patches = extract_patches(label_idx,
+                                      img_warp,
                                       patch_size=patch_size)
             print('patches: ', patches.shape)
 
@@ -416,14 +325,14 @@ class Train_model_frontend(object):
             num_patches_max = 500
 
             pred_res = self.subnet(
-                patches[:num_patches_max, ...].to(self.device))
+                patches[:num_patches_max, ...])
 
             def get_loss(points_res, pred_res):
                 loss = points_res - pred_res
                 loss = paddle.norm(loss, p=2, axis=-1).mean()
                 return loss
 
-            loss = get_loss(points_res[:num_patches_max, ...].to(self.device), pred_res)
+            loss = get_loss(points_res[:num_patches_max, ...], pred_res)
 
             losses.update({'subpix_loss': subpix_loss})
 
@@ -464,10 +373,6 @@ class Train_model_frontend(object):
         return loss.item()
 
     def saveModel(self):
-        """
-        # save checkpoint for resuming training
-        :return:
-        """
         model_state_dict = self.net.module.state_dict()
         save_checkpoint(self.save_path,
                         {'n_iter': self.n_iter + 1,
@@ -478,14 +383,6 @@ class Train_model_frontend(object):
         pass
 
     def add_single_image_to_tb(self, task, img_tensor, n_iter, name='img'):
-        """
-        # add image to tensorboard for visualization
-        :param task:
-        :param img_tensor:
-        :param n_iter:
-        :param name:
-        :return:
-        """
         if img_tensor.dim() == 4:
             for i in range(min(img_tensor.shape[0], 5)):
                 self.writer.add_image(
@@ -501,19 +398,6 @@ class Train_model_frontend(object):
     def addImg2tensorboard(self, img, labels_2D, semi, img_warp=None,
         labels_warp_2D=None, mask_warp_2D=None, semi_warp=None,
         mask_3D_flattened=None, task='training'):
-        """
-        # deprecated: add images to tensorboard
-        :param img:
-        :param labels_2D:
-        :param semi:
-        :param img_warp:
-        :param labels_warp_2D:
-        :param mask_warp_2D:
-        :param semi_warp:
-        :param mask_3D_flattened:
-        :param task:
-        :return:
-        """
         n_iter = self.n_iter
         semi_flat = flattenDetection(semi[0, :, :, :])
         semi_warp_flat = flattenDetection(semi_warp[0, :, :, :])
@@ -562,12 +446,6 @@ class Train_model_frontend(object):
         self.writer.add_image(task + '-mask_warp_overlay', mask_overlap, n_iter)
 
     def tb_scalar_dict(self, losses, task='training'):
-        """
-        # add scalar dictionary to tensorboard
-        :param losses:
-        :param task:
-        :return:
-        """
         for element in list(losses):
             self.writer.add_scalar(
                 task + '-' + element,
@@ -575,15 +453,6 @@ class Train_model_frontend(object):
                 self.n_iter)
 
     def tb_images_dict(self, task, tb_imgs, max_img=5):
-        """
-        # add image dictionary to tensorboard
-        :param task:
-            str (train, val)
-        :param tb_imgs:
-        :param max_img:
-            int - number of images
-        :return:
-        """
         for element in list(tb_imgs):
             for idx in range(tb_imgs[element].shape[0]):
                 if idx >= max_img:
@@ -602,26 +471,11 @@ class Train_model_frontend(object):
         pass
 
     def printLosses(self, losses, task='training'):
-        """
-        # print loss for tracking training
-        :param losses:
-        :param task:
-        :return:
-        """
         for element in list(losses):
             print(task, '-', element, ': ', losses[element].item())
 
     def add2tensorboard_nms(self, img, labels_2D, semi, task='training',
         batch_size=1):
-        """
-        # deprecated:
-        :param img:
-        :param labels_2D:
-        :param semi:
-        :param task:
-        :param batch_size:
-        :return:
-        """
         from utils.utils import getPtsFromHeatmap
         from utils.utils import box_nms
 
@@ -668,7 +522,7 @@ class Train_model_frontend(object):
                                                nms_dist,
                                                min_prob=conf_thresh).cpu()
 
-                semi_flat_tensor_nms = (semi_flat_tensor_nms >= conf_thresh).float()
+                semi_flat_tensor_nms = paddle.to_tensor((semi_flat_tensor_nms >= conf_thresh), dtype=paddle.float32)
 
                 if idx < 5:
                     result_overlap = img_overlap(
@@ -745,13 +599,11 @@ if __name__ == '__main__':
     filename = 'configs/superpoint_coco_test.yaml'
     import yaml
 
-    device = 'cuda' if paddle.is_compiled_with_cuda() else 'cpu'
-    device = device.replace('cuda', 'gpu')
-    device = paddle.set_device(device)
+    device = paddle.device.set_device('gpu')
 
     paddle.set_default_dtype('float32')
     with open(filename, 'r') as f:
-        config = yaml.load(f)
+        config = yaml.load(f, Loader=yaml.FullLoader)
 
     from utils.loader import dataLoader as dataLoader
 

@@ -27,7 +27,7 @@ from models.model_wrap import SuperPointFrontend_torch
 @paddle.no_grad()
 class Val_model_heatmap(SuperPointFrontend_torch):
 
-    def __init__(self, config, device='cpu', verbose=False):
+    def __init__(self, config, device='gpu', verbose=False):
         self.config = config
         self.model = self.config['name']
         self.params = self.config['params']
@@ -54,18 +54,13 @@ class Val_model_heatmap(SuperPointFrontend_torch):
         self.net = modelLoader(model=self.model, **self.params)
 
         checkpoint = paddle.load(self.weights_path)
-        self.net.load_state_dict(checkpoint['model_state_dict'])
+        self.net.set_state_dict(checkpoint['model_state_dict'])
 
-        self.net = self.net.to(self.device)
         logging.info('successfully load pretrained model from: %s', self.weights_path)
         pass
 
     def extract_patches(self, label_idx, img):
-        """
-        input: 
-            label_idx: tensor [N, 4]: (batch, 0, y, x)
-            img: tensor [batch, channel(1), H, W]
-        """
+
         from utils.losses import extract_patches
         patch_size = self.config['params']['patch_size']
         patches = extract_patches(label_idx.to(self.device),
@@ -75,11 +70,7 @@ class Val_model_heatmap(SuperPointFrontend_torch):
         pass
 
     def run(self, images):
-        """
-        input: 
-            images: tensor[batch(1), 1, H, W]
 
-        """
         from Train_model_heatmap import Train_model_heatmap
         from utils.var_dim import toNumpy
         train_agent = Train_model_heatmap
@@ -118,14 +109,12 @@ if __name__ == '__main__':
     filename = 'configs/magicpoint_repeatability_heatmap.yaml'
     import yaml
 
-    device = 'cuda' if paddle.is_compiled_with_cuda() else 'cpu'
-    device = device.replace('cuda', 'gpu')
-    device = paddle.set_device(device)
+    device = paddle.devive.set_device('gpu')
 
     paddle.set_default_dtype('float32')
 
     with open(filename, 'r') as f:
-        config = yaml.load(f)
+        config = yaml.load(f, Loader=yaml.FullLoader)
 
     task = config['data']['dataset']
 
@@ -144,7 +133,7 @@ if __name__ == '__main__':
         img = sample['image']
         print('image: ', img.shape)
 
-        heatmap_batch = val_agent.run(img.to(device))
+        heatmap_batch = val_agent.run(img)
         pts = val_agent.heatmap_to_pts()
         print('pts[0]: ', pts[0].shape)
         print('pts: ', pts[0][:, :3])

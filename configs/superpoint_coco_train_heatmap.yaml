@@ -2,7 +2,7 @@ data:
     # name: 'coco'
     dataset: 'Coco' # 'coco'
 
-    labels: datasets/magicpoint_synth20_homoAdapt100_coco_f1/predictions
+    labels: logs/magicpoint_synth20_homoAdapt100_coco_f1/predictions
     root: # datasets/COCO
     root_split_txt: # /datasets/COCO
 
@@ -51,8 +51,8 @@ data:
 front_end_model: 'Train_model_heatmap'  # 'Train_model_frontend'
 
 training:
-    workers_train: 4 # 16
-    workers_val: 2 # 2
+    workers_train: 0 # 16
+    workers_val: 0 # 2
 
 model:
     # name: 'magic_point'
