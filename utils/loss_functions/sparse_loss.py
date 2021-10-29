@@ -10,7 +10,7 @@ from utils.loss_functions.pixelwise_contrastive_loss import PixelwiseContrastive
 def get_coor_cells(Hc, Wc, cell_size, device='gpu', uv=False):
     coor_cells = paddle.stack(paddle.meshgrid(paddle.arange(Hc), paddle.arange(Wc)), axis=2)
     coor_cells = paddle.to_tensor(coor_cells, dtype=paddle.float32)
-    coor_cells = coor_cells.view(-1, 2)
+    coor_cells = paddle.reshape(coor_cells, shape=[-1, 2])
     if uv:
         coor_cells = paddle.stack((coor_cells[:, (1)], coor_cells[:, (0)]), axis=1)
     return coor_cells
@@ -31,10 +31,10 @@ def warp_coor_cells_with_homographies(coor_cells, homographies, uv=False,
 
 
 def create_non_matches(uv_a, uv_b_non_matches, multiplier):
-    uv_a_long = (paddle.t(uv_a[0].repeat(multiplier, 1)).contiguous().view(-1, 1),
-                 paddle.t(uv_a[1].repeat(multiplier, 1)).contiguous().view(-1, 1))
+    uv_a_long = (paddle.reshape(paddle.t(uv_a[0].repeat(multiplier, 1)).contiguous(), shape=[-1, 1]),
+                 paddle.reshape(paddle.t(uv_a[1].repeat(multiplier, 1)).contiguous(), shape=[-1, 1]))
 
-    uv_b_non_matches_long = uv_b_non_matches[0].view(-1, 1), uv_b_non_matches[1].view(-1, 1)
+    uv_b_non_matches_long = paddle.reshape(uv_b_non_matches[0], shape=[-1, 1]), paddle.reshape(uv_b_non_matches[1], shape=[-1, 1])
     return uv_a_long, uv_b_non_matches_long
 
 
@@ -101,7 +101,7 @@ def descriptor_loss_sparse(descriptors, descriptors_warped, homographies,
     img_shape = Hc, Wc
 
     def descriptor_reshape(descriptors):
-        descriptors = descriptors.view(-1, Hc * Wc).transpose(0, 1)
+        descriptors = paddle.transpose(paddle.reshape(descriptors, shape=[-1, Hc * Wc]), perm=[1, 0]
         descriptors = descriptors.unsqueeze(0)
         return descriptors
     image_a_pred = descriptor_reshape(descriptors)

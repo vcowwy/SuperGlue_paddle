@@ -88,8 +88,9 @@ class PatchesDataset(data.Dataset):
         return len(self.samples)
 
     def _init_dataset(self, **config):
-        dataset_folder = 'COCO/patches' if config['dataset'
-            ] == 'coco' else 'HPatches'
+        dataset_folder = 'check_dataset'
+        #dataset_folder = 'COCO/patches' if config['dataset'
+        #    ] == 'coco' else 'HPatches'
         base_path = Path(DATA_PATH, dataset_folder)
         folder_paths = [x for x in base_path.iterdir() if x.is_dir()]
         image_paths = []

@@ -181,7 +181,7 @@ class Coco(paddle.io.Dataset):
                 labels = labels[:, :, np.newaxis]
                 heatmaps = augmentation(labels)
 
-            warped_labels_gaussian = paddle.to_tensor(heatmaps, dtype=paddle.float32).view(-1, H, W)
+            warped_labels_gaussian = paddle.reshape(paddle.to_tensor(heatmaps, dtype=paddle.float32), shape=[-1, H, W])
             warped_labels_gaussian[warped_labels_gaussian > 1.0] = 1.0
             return warped_labels_gaussian
 

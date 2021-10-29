@@ -49,7 +49,7 @@ class Train_model_subpixel(Train_model_frontend):
         model = self.config['model']['name']
         params = self.config['model']['params']
         print('model: ', model)
-        net = modelLoader(model=model, **params).to(self.device)
+        net = modelLoader(model=model, **params)
 
         logging.info('=> setting adam solver')
 

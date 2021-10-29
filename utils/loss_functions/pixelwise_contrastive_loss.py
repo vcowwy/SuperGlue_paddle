@@ -100,11 +100,11 @@ class PixelwiseContrastiveLoss(object):
         \\sum_{triplets} ||D(I_a, u_a, I_b, u_{b,match})||_2^2 - ||D(I_a, u_a, I_b, u_{b,non-match)||_2^2 + alpha 
 
         """
-        num_matches = matches_a.size()[0]
-        num_non_matches = non_matches_a.size()[0]
+        num_matches = matches_a.shape[0]
+        num_non_matches = non_matches_a.shape[0]
         multiplier = num_non_matches / num_matches
 
-        matches_b_long = paddle.t(matches_b.repeat(multiplier, 1)).contiguous().view(-1)
+        matches_b_long = paddle.reshape(paddle.t(matches_b.repeat(multiplier, 1)).contiguous(), shape=[-1])
         
         matches_a_descriptors = paddle.index_select(image_a_pred, 1, non_matches_a)
         matches_b_descriptors = paddle.index_select(image_b_pred, 1, matches_b_long)
@@ -138,7 +138,7 @@ class PixelwiseContrastiveLoss(object):
         """
         if method == '2d':
             import paddle.nn.functional as F
-            num_matches = matches_a.size()[0]
+            num_matches = matches_a.shape[0]
             mode = 'bilinear'
 
             def sampleDescriptors(image_a_pred, matches_a, mode, norm=False):
@@ -154,7 +154,7 @@ class PixelwiseContrastiveLoss(object):
             matches_a_descriptors = sampleDescriptors(image_a_pred, matches_a, mode, norm=norm)
             matches_b_descriptors = sampleDescriptors(image_b_pred, matches_b, mode, norm=norm)
         else:
-            num_matches = matches_a.size()[0]
+            num_matches = matches_a.shape[0]
 
             matches_a_descriptors = paddle.index_select(image_a_pred, 1, matches_a)
             matches_b_descriptors = paddle.index_select(image_b_pred, 1, matches_b)
@@ -248,7 +248,7 @@ class PixelwiseContrastiveLoss(object):
 
         PCL = PixelwiseContrastiveLoss
 
-        num_non_matches = non_matches_a.size()[0]
+        num_non_matches = non_matches_a.shape[0]
 
         non_match_descriptor_loss, num_hard_negatives, _, _ = (PCL.non_match_descriptor_loss(image_a_pred, image_b_pred, non_matches_a, non_matches_b, M=M_descriptor))
 
@@ -285,7 +285,7 @@ class PixelwiseContrastiveLoss(object):
 
         non_match_loss_vec, num_hard_negatives, _, _ = (PCL.non_match_descriptor_loss(image_a_pred, image_b_pred,
                                                                                       non_matches_a, non_matches_b, M=M_descriptor, invert=invert))
-        num_non_matches = long(non_match_loss_vec.size()[0])
+        num_non_matches = paddle.to_tensor(non_match_loss_vec.shape[0], dtype=paddle.int64)
 
         non_match_loss = non_match_loss_vec.sum()
 
@@ -310,7 +310,7 @@ class PixelwiseContrastiveLoss(object):
 
         num_non_matches_per_match = len(non_matches_b) / len(matches_b)
 
-        ground_truth_pixels_for_non_matches_b = paddle.t(matches_b.repeat(num_non_matches_per_match,1)).contiguous().view(-1,1)
+        ground_truth_pixels_for_non_matches_b = paddle.reshape(paddle.t(matches_b.repeat(num_non_matches_per_match,1)).contiguous(), shape=[-1,1])
 
         ground_truth_u_v_b = self.flattened_pixel_locations_to_u_v(ground_truth_pixels_for_non_matches_b)
         sampled_u_v_b = self.flattened_pixel_locations_to_u_v(non_matches_b.unsqueeze(1))
@@ -372,8 +372,8 @@ class PixelwiseContrastiveLoss(object):
         :return: loss, match_loss, non_match_loss
         :rtype: torch.Variable(torch.FloatTensor) each of shape torch.Size([1])
         """
-        num_matches = matches_a.size()[0]
-        num_non_matches = non_matches_a.size()[0]
+        num_matches = matches_a.shape[0]
+        num_non_matches = non_matches_a.shape[0]
 
         matches_a_descriptors = paddle.index_select(image_a_pred, 1, matches_a)
         matches_b_descriptors = paddle.index_select(image_b_pred, 1, matches_b)

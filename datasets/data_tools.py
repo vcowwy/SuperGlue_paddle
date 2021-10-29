@@ -19,7 +19,7 @@ def extrapolate_points(pnts):
 def scatter_points(warped_pnts, H, W, res_ext=1):
     warped_labels = paddle.zeros([H, W]).requires_grad_(False)
     warped_labels[quan(warped_pnts)[:, 1], quan(warped_pnts)[:, 0]] = res_ext
-    warped_labels = warped_labels.view(-1, H, W)
+    warped_labels = paddle.reshape(warped_labels, shape=[-1, H, W])
     return warped_labels
 
 
@@ -58,7 +58,7 @@ def warpLabels(pnts, H, W, homography, bilinear=False):
 
 
 def np_to_tensor(img, H, W):
-    img = paddle.to_tensor(img, dtype=paddle.float32).view(-1, H, W)
+    img = paddle.reshape(paddle.to_tensor(img, dtype=paddle.float32), shape=[-1, H, W])
     return img
 
 

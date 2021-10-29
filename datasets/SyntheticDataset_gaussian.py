@@ -265,7 +265,7 @@ class SyntheticDataset_gaussian(data.Dataset):
                 warped_img = imgPhotometric(warped_img.numpy().squeeze())
                 warped_img = paddle.to_tensor(warped_img, dtype=paddle.float32)
                 pass
-            warped_img = warped_img.view(-1, H, W)
+            warped_img = paddle.reshape(warped_img, shape=[-1, H, W])
             warped_set = warpLabels(pnts, H, W, homography, bilinear=True)
             warped_labels = warped_set['labels']
             warped_res = warped_set['res']

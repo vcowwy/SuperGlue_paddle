@@ -52,16 +52,16 @@ class SpatialSoftArgmax2d(paddle.nn.Layer):
                              .format(input.shape))
         # unpack shapes and create view from input tensor
         batch_size, channels, height, width = input.shape
-        x: paddle.Tensor = input.view(batch_size, channels, -1)
+        x: paddle.Tensor = paddle.reshape(input, shape=[batch_size, channels, -1])
 
         # compute softmax with max substraction trick
         exp_x = paddle.exp(x - paddle.max(x, axis=-1, keepdim=True)[0])
-        exp_x_sum = 1.0 / (exp_x.sum(dim=-1, keepdim=True) + self.eps)
+        exp_x_sum = 1.0 / (exp_x.sum(axis=-1, keepdim=True) + self.eps)
 
         # create coordinates grid
         pos_y, pos_x = create_meshgrid(input, self.normalized_coordinates)
-        pos_x = pos_x.reshape(-1)
-        pos_y = pos_y.reshape(-1)
+        pos_x = paddle.reshape(pos_x, shape=[-1])
+        pos_y = paddle.reshape(pos_y, shape=[-1])
 
         # compute the expected coordinates
         expected_y: paddle.Tensor = paddle.sum(
@@ -69,7 +69,7 @@ class SpatialSoftArgmax2d(paddle.nn.Layer):
         expected_x: paddle.Tensor = paddle.sum(
             (pos_x * exp_x) * exp_x_sum, axis=-1, keepdim=True)
         output: paddle.Tensor = paddle.concat([expected_x, expected_y], axis=-1)
-        return output.view(batch_size, channels, 2)  # BxNx2
+        return paddle.reshape(output, shape=[batch_size, channels, 2])  # BxNx2
 
 
 def create_meshgrid(

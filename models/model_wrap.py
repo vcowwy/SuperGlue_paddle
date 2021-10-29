@@ -77,8 +77,6 @@ class SuperPointFrontend_torch(object):
             self.net = SuperPointNet()
             self.net.load_dict(paddle.load(weights_path))
 
-        self.net = self.net.to(self.device)
-
     def net_parallel(self):
         print("=== Let's use", paddle.get_device(), 'GPUs!')
         self.net = paddle.DataParallel(self.net)
@@ -151,7 +149,7 @@ class SuperPointFrontend_torch(object):
         from utils.losses import norm_patches
 
         pts = pts[0].transpose().copy()
-        patches = extract_patch_from_points(self.heatmap, pts, patch_size, patch_size)
+        patches = extract_patch_from_points(self.heatmap, pts, patch_size=patch_size)
         
         import paddle
         
@@ -206,12 +204,13 @@ class SuperPointFrontend_torch(object):
             samp_pts = paddle.to_tensor(pts[:2, :].copy())
             samp_pts[0, :] = samp_pts[0, :] / (float(W) / 2.0) - 1.0
             samp_pts[1, :] = samp_pts[1, :] / (float(H) / 2.0) - 1.0
-            samp_pts = samp_pts.transpose(0, 1).contiguous()
-            samp_pts = samp_pts.view(1, 1, -1, 2)
+            samp_pts = paddle.transpose(samp_pts, perm=[0, 1])
+                #.contiguous()
+            samp_pts = paddle.reshape(samp_pts, shape=[1, 1, -1, 2])
             samp_pts = paddle.to_tensor(samp_pts, dtype=paddle.float32)
-            samp_pts = samp_pts.to(self.device)
+
             desc = paddle.nn.functional.grid_sample(coarse_desc, samp_pts, align_corners=True)
-            desc = desc.data.cpu().numpy().reshape(D, -1)
+            desc = desc.numpy().reshape(D, -1)
             desc /= np.linalg.norm(desc, axis=0)[np.newaxis, :]
         return desc
 
@@ -232,7 +231,6 @@ class SuperPointFrontend_torch(object):
         pass
 
     def run(self, inp, onlyHeatmap=False, train=True):
-        inp = inp.to(self.device)
         batch_size, H, W = inp.shape[0], inp.shape[2], inp.shape[3]
         if train:
             outs = self.net.forward(inp)

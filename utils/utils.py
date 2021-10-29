@@ -289,10 +289,10 @@ def labels2Dto3D_flattened(labels, cell_size):
 
 def old_flatten64to1(semi, tensor=False):
     if tensor:
-        is_batch = len(semi.size()) == 4
+        is_batch = len(semi.shape) == 4
         if not is_batch:
             semi = semi.unsqueeze_(0)
-        Hc, Wc = semi.size()[2], semi.size()[3]
+        Hc, Wc = semi.shape[2], semi.shape[3]
         cell = 8
         semi.transpose_(1, 2)
         semi.transpose_(2, 3)
@@ -515,7 +515,7 @@ def mAP(pred_batch, labels_batch):
 
 def precisionRecall_torch(pred, labels):
     offset = 10 ** -6
-    assert pred.size() == labels.size(), 'Sizes of pred, labels should match when you get the precision/recall!'
+    assert pred.shape == labels.shape, 'Sizes of pred, labels should match when you get the precision/recall!'
     precision = paddle.sum(pred * labels) / (paddle.sum(pred) + offset)
     recall = paddle.sum(pred * labels) / (paddle.sum(labels) + offset)
     if precision.item() > 1.0:

@@ -511,7 +511,7 @@ class Train_model_frontend(object):
                     result_overlap,
                     n_iter)
 
-            assert semi_thd_nms_sample.shape == label_sample_nms_sample.size()
+            assert semi_thd_nms_sample.shape == label_sample_nms_sample.shape()
             precision_recall = precisionRecall_torch(
                 paddle.to_tensor(semi_thd_nms_sample),
                 label_sample_nms_sample)

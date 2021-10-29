@@ -44,7 +44,7 @@ class SuperPointNet_gauss2(paddle.nn.Layer):
         cDa = self.relu(self.bnDa(self.convDa(x4)))
         desc = self.bnDb(self.convDb(cDa))
         dn = paddle.norm(desc, p=2, axis=1) # Compute the norm.
-        desc = desc.div(paddle.unsqueeze(dn, 1))
+        desc = paddle.divide(desc, paddle.unsqueeze(dn, 1))
         output = {'semi': semi, 'desc': desc}
         self.output = output
         return output

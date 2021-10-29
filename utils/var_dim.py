@@ -11,9 +11,9 @@ def to3dim(img):
 
 def tensorto4d(inp):
     if len(inp.shape) == 2:
-        inp = inp.view(1, 1, inp.shape[0], inp.shape[1])
+        inp = paddle.reshape(inp, shape=[1, 1, inp.shape[0], inp.shape[1]])
     elif len(inp.shape) == 3:
-        inp = inp.view(1, inp.shape[0], inp.shape[1], inp.shape[2])
+        inp = paddle.reshape(inp, shape=[1, inp.shape[0], inp.shape[1], inp.shape[2]])
     return inp
 
 

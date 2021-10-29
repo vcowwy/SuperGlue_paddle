@@ -12,7 +12,6 @@ import numpy as np
 from imageio import imread
 from tqdm import tqdm
 
-#from tensorboardX import SummaryWriter
 from visualdl import LogWriter
 
 import paddle

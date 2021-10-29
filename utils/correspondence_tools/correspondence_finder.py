@@ -95,7 +95,7 @@ def random_sample_from_masked_image_torch(img_mask, num_samples):
         img_mask_torch = paddle.to_tensor(img_mask, dtype=paddle.float32)
     else:
         img_mask_torch = img_mask
-    mask = img_mask_torch.view(image_width * image_height, 1).squeeze(1)
+    mask = paddle.reshape(img_mask_torch, shape=[image_width * image_height, 1]).squeeze(1)
     mask_indices_flat = paddle.nonzero(mask)
     if len(mask_indices_flat) == 0:
         return None, None
@@ -140,7 +140,7 @@ def create_non_correspondences(uv_b_matches, img_b_shape,
         return pytorch_rand_select_pixel(width=image_width, height=\
             image_height, num_samples=num_matches * num_non_matches_per_match)
     if img_b_mask is not None:
-        img_b_mask_flat = img_b_mask.view(-1, 1).squeeze(1)
+        img_b_mask_flat = paddle.reshape(img_b_mask, shape=[-1, 1]).squeeze(1)
         mask_b_indices_flat = paddle.nonzero(img_b_mask_flat)
         if len(mask_b_indices_flat) == 0:
             print('warning, empty mask b')
@@ -155,15 +155,15 @@ def create_non_correspondences(uv_b_matches, img_b_shape,
                 image_width, randomized_mask_b_indices_flat / image_width)
     else:
         uv_b_non_matches = get_random_uv_b_non_matches()
-    uv_b_non_matches = uv_b_non_matches[0].view(num_matches,
-        num_non_matches_per_match), uv_b_non_matches[1].view(num_matches,
-        num_non_matches_per_match)
+    uv_b_non_matches = paddle.reshape(uv_b_non_matches[0], shape=[num_matches,
+        num_non_matches_per_match]), paddle.reshape(uv_b_non_matches[1], shape=[num_matches,
+        num_non_matches_per_match])
     copied_uv_b_matches_0 = paddle.t(uv_b_matches[0].repeat(num_non_matches_per_match, 1))
     copied_uv_b_matches_1 = paddle.t(uv_b_matches[1].repeat(num_non_matches_per_match, 1))
     diffs_0 = copied_uv_b_matches_0 - paddle.to_tensor(uv_b_non_matches[0], dtype=paddle.float32)
     diffs_1 = copied_uv_b_matches_1 - paddle.to_tensor(uv_b_non_matches[1], dtype=paddle.float32)
-    diffs_0_flattened = diffs_0.view(-1, 1)
-    diffs_1_flattened = diffs_1.view(-1, 1)
+    diffs_0_flattened = paddle.reshape(diffs_0, shape=[-1, 1])
+    diffs_1_flattened = paddle.reshape(diffs_1, shape=[-1, 1])
     diffs_0_flattened = paddle.abs(diffs_0_flattened).squeeze(1)
     diffs_1_flattened = paddle.abs(diffs_1_flattened).squeeze(1)
     need_to_be_perturbed = paddle.full_like(diffs_0_flattened).requires_grad_(
@@ -182,8 +182,8 @@ def create_non_correspondences(uv_b_matches, img_b_shape,
     random_vector = paddle.randn(len(need_to_be_perturbed)
         ) * std_dev + minimal_perturb_vector
     perturb_vector = need_to_be_perturbed * random_vector
-    uv_b_non_matches_0_flat = paddle.to_tensor(uv_b_non_matches[0], dtype=paddle.float32).view(-1, 1).squeeze(1)
-    uv_b_non_matches_1_flat = paddle.to_tensor(uv_b_non_matches[1], dtype=paddle.float32).view(-1, 1).squeeze(1)
+    uv_b_non_matches_0_flat = paddle.reshape(paddle.to_tensor(uv_b_non_matches[0], dtype=paddle.float32), shape=[-1, 1]).squeeze(1)
+    uv_b_non_matches_1_flat = paddle.reshape(paddle.to_tensor(uv_b_non_matches[1], dtype=paddle.float32), shape[-1, 1]).squeeze(1)
     uv_b_non_matches_0_flat = uv_b_non_matches_0_flat + perturb_vector
     uv_b_non_matches_1_flat = uv_b_non_matches_1_flat + perturb_vector
     lower_bound = 0.0
@@ -210,8 +210,8 @@ def create_non_correspondences(uv_b_matches, img_b_shape,
     uv_b_non_matches_1_flat = where(uv_b_non_matches_1_flat <
         lower_bound_vec, uv_b_non_matches_1_flat + upper_bound_vec,
         uv_b_non_matches_1_flat)
-    return uv_b_non_matches_0_flat.view(num_matches, num_non_matches_per_match
-        ), uv_b_non_matches_1_flat.view(num_matches, num_non_matches_per_match)
+    return paddle.reshape(uv_b_non_matches_0_flat, shape=[num_matches, num_non_matches_per_match
+        ]), paddle.reshape(uv_b_non_matches_1_flat, shape=[num_matches, num_non_matches_per_match])
 
 
 def batch_find_pixel_correspondences(img_a_depth, img_a_pose, img_b_depth,
@@ -245,7 +245,7 @@ def batch_find_pixel_correspondences(img_a_depth, img_a_pose, img_b_depth,
     rdf_to_body = inv(body_to_rdf)
     img_a_depth_torch = paddle.to_tensor(img_a_depth, dtype=paddle.float32)
     img_a_depth_torch = paddle.squeeze(img_a_depth_torch, 0)
-    img_a_depth_torch = img_a_depth_torch.view(-1, 1)
+    img_a_depth_torch = paddle.reshape(img_a_depth_torch, shape=[-1, 1])
     depth_vec = paddle.index_select(img_a_depth_torch, 0, uv_a_vec_flattened)*1.0/DEPTH_IM_SCALE
     depth_vec = depth_vec.squeeze(1)
     nonzero_indices = paddle.nonzero(depth_vec)
@@ -320,7 +320,7 @@ def batch_find_pixel_correspondences(img_a_depth, img_a_pose, img_b_depth,
 
     img_b_depth_torch = paddle.to_tensor(img_b_depth, dtype=paddle.float32)
     img_b_depth_torch = paddle.squeeze(img_b_depth_torch, 0)
-    img_b_depth_torch = img_b_depth_torch.view(-1, 1)
+    img_b_depth_torch = paddle.reshape(img_b_depth_torch, shape=[-1, 1])
     uv_b_vec_flattened = paddle.to_tensor(v2_vec, dtype=paddle.int64) * image_width + paddle.to_tensor(u2_vec, dtype=paddle.int64)
     depth2_vec = paddle.index_select(img_b_depth_torch, 0, uv_b_vec_flattened)*1.0/1000
     depth2_vec = depth2_vec.squeeze(1)

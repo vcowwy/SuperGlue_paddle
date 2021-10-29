@@ -52,7 +52,7 @@ class SuperPointNet_process(object):
             samp_pts[0, :] = samp_pts[0, :] / (float(W) / 2.0) - 1.0
             samp_pts[1, :] = samp_pts[1, :] / (float(H) / 2.0) - 1.0
             samp_pts = samp_pts.transpose(0, 1).contiguous()
-            samp_pts = samp_pts.view(1, 1, -1, 2)
+            samp_pts = paddle.reshape(samp_pts, shape=[1, 1, -1, 2])
             samp_pts = paddle.to_tensor(samp_pts, dtype=paddle.float32)
             desc = paddle.nn.functional.grid_sample(coarse_desc, samp_pts, align_corners=True) # tensor [batch_size(1), D, 1, N]
             desc = desc.squeeze().transpose(0, 1).unsqueeze(0)
@@ -91,7 +91,6 @@ class SuperPointNet_process(object):
             heatmap_nms_batch = heatmap_nms_batch[:, np.newaxis, ...]
             if tensor:
                 heatmap_nms_batch = to_floatTensor(heatmap_nms_batch)
-                heatmap_nms_batch = heatmap_nms_batch.to(self.device)
         self.heatmap = heatmap
         self.heatmap_nms_batch = heatmap_nms_batch
         return heatmap_nms_batch

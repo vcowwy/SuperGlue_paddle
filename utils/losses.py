@@ -32,10 +32,10 @@ def _roi_pool(pred_heatmap, rois, patch_size=8):
 
 def norm_patches(patches):
     patch_size = patches.shape[-1]
-    patches = patches.view(-1, 1, patch_size * patch_size)
+    patches = paddle.reshape(patches, shape=[-1, 1, patch_size * patch_size])
     d = paddle.sum(patches, axis=-1).unsqueeze(-1) + 1e-06
     patches = patches / d
-    patches = patches.view(-1, 1, patch_size, patch_size)
+    patches = paddle.reshape(patches, shape=[-1, 1, patch_size, patch_size])
 
     return patches
 
